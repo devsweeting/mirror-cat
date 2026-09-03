@@ -1,0 +1,392 @@
+/* Design tokens -- see chat mockup "mirror-cat-mockup" for the source
+   design plan. Kept intentionally small: one accent pair (cyan/magenta,
+   a nod to chromatic fringing at the edge of a projected image) rather
+   than a large palette. */
+:root {
+  color-scheme: dark;
+  --bg: #0b0c0e;
+  --panel: #16171a;
+  --panel-raised: #1d1e22;
+  --border: #2b2d31;
+  --border-soft: #212226;
+  --text: #ecedef;
+  --text-dim: #8a8d93;
+  --text-faint: #5c5e64;
+  --cyan: #5fe7d6;
+  --magenta: #ff5fa0;
+  --amber: #ffb454;
+
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* ---------- Topbar ---------- */
+.topbar {
+  flex-shrink: 0;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+
+.topbar-spacer {
+  flex: 1;
+}
+
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-radius: 20px;
+}
+
+.status-pill.live {
+  color: var(--amber);
+  background: rgba(255, 180, 84, 0.08);
+  border: 1px solid rgba(255, 180, 84, 0.25);
+}
+
+.status-pill.idle {
+  color: var(--text-faint);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+
+.status-pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-pill.live .dot {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* ---------- Cat eyes (signature element) ---------- */
+.cat-eyes {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.cat-eyes span {
+  width: 4px;
+  height: 6px;
+  border-radius: 2px;
+  display: block;
+  animation: blink 4.5s ease-in-out infinite;
+}
+
+.cat-eyes span:first-child {
+  background: var(--cyan);
+}
+
+.cat-eyes span:last-child {
+  background: var(--magenta);
+  animation-delay: 0.05s;
+}
+
+@keyframes blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.15);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-pill.live .dot,
+  .cat-eyes span {
+    animation: none;
+  }
+}
+
+/* ---------- Body / sidebar ---------- */
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.sidebar-section.grow {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin: 0 0 10px;
+}
+
+.sidebar select,
+.sidebar button,
+.sidebar textarea,
+.sidebar input[type='text'] {
+  width: 100%;
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.sidebar button {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.sidebar button:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.sidebar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.surface-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 8px;
+}
+
+.surface-list li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+  border-left: 2px solid transparent;
+}
+
+.surface-list li button:first-child {
+  flex: 1;
+  text-align: left;
+  margin-bottom: 0;
+  border-radius: 0 6px 6px 0;
+}
+
+.surface-list li.active {
+  border-left-color: var(--cyan);
+}
+
+.surface-list li.active button:first-child {
+  border-color: var(--border);
+  color: var(--cyan);
+}
+
+.icon-button {
+  width: 28px;
+  flex-shrink: 0;
+  margin-bottom: 0;
+}
+
+.hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.error {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--magenta);
+}
+
+/* ---------- Cat / assistant section (lives in the sidebar, not a
+   floating panel over the canvas) ---------- */
+.cat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.cat-header .cat-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cat-header .cat-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.prompt-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.prompt-panel textarea {
+  resize: vertical;
+  font-family: var(--font-ui);
+}
+
+.prompt-panel button {
+  margin-top: auto;
+  padding: 9px 16px;
+  background: var(--cyan);
+  color: #06202a;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.prompt-panel button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---------- Stage (no toolbar row, no floating layer panel --
+   just the canvas, full bleed) ---------- */
+.stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  min-width: 0;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 1px) 0 0 / 24px
+      24px,
+    var(--bg);
+}
+
+.projection-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.projection-canvas canvas {
+  display: block;
+}
+
+.corner-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px;
+  border-radius: 50%;
+  background: var(--cyan);
+  border: 2px solid #06202a;
+  cursor: grab;
+  touch-action: none;
+}
+
+.corner-handle:active {
+  cursor: grabbing;
+}
+
+.empty-state {
+  color: var(--text-dim);
+  margin: auto;
+}
+
+.output-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  overflow: hidden;
+}
+
+.output-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.output-layer .projection-canvas {
+  border: none;
+  border-radius: 0;
+  height: 100%;
+}
