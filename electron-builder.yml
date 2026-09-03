@@ -1,0 +1,15 @@
+appId: com.sweetbitscreative.mirrorcat
+productName: MirrorCat
+directories:
+  buildResources: build
+  output: release
+files:
+  - out/**/*
+  - package.json
+mac:
+  category: public.app-category.graphics-design
+  target: dmg
+win:
+  target: nsis
+linux:
+  target: AppImage
