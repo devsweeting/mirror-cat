@@ -1,0 +1,320 @@
+/* "Lights down": the control window is a dim room at night. The projected
+   content is the only bright thing, and the single interface accent
+   (--bulb) is reserved for light itself: going live and generating. Cat's
+   eyes keep their own cyan/magenta pair, used nowhere else. Surface colors are user content, not part of this
+   palette. */
+:root {
+  color-scheme: dark;
+
+  /* Palette */
+  --room: #1d1a23; /* app background */
+  --wall: #26232e; /* panels */
+  --wall-raised: #302c39; /* inputs, hovered rows */
+  --seam: #3b3647; /* the few borders that remain */
+  --plaster: #e8e3d9; /* text: warm, like light on paint */
+  --dusk: #9d96a8; /* secondary text */
+  --shade: #6f687b; /* meta, disabled */
+  --bulb: #ffd27a; /* light: live, generate, eyeshine */
+  --bulb-ink: #2b2006; /* text on bulb */
+  --alert: #f2877a;
+  /* Cat's eyes only -- never used for UI. */
+  --eye-cyan: #5fe7d6;
+  --eye-magenta: #ff5fa0;
+
+  /* Type */
+  --font-display: 'Bricolage Grotesque Variable', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-ui: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 13px;
+  --text-lg: 15px;
+  --text-xl: 19px;
+
+  /* Shape: small radii on controls, larger on the panels that hold them. */
+  --radius-sm: 5px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  --topbar-height: 52px;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--room);
+  color: var(--plaster);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* Numbers that change (sizes, percentages, counts) shouldn't jiggle. */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--plaster);
+  outline-offset: 2px;
+}
+
+/* ---------- Buttons ----------
+   .btn is the quiet default. .btn-light is the one that emits light (go
+   live, generate) -- use it for at most one action per area. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--plaster);
+  background: var(--wall-raised);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 0.12s var(--ease),
+    color 0.12s var(--ease);
+}
+
+.btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--wall-raised) 70%, var(--plaster) 12%);
+}
+
+.btn:disabled {
+  color: var(--shade);
+  cursor: default;
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--dusk);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  color: var(--plaster);
+  background: var(--wall-raised);
+}
+
+.btn-light {
+  color: var(--bulb-ink);
+  background: var(--bulb);
+  font-weight: 600;
+}
+
+.btn-light:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bulb) 88%, white);
+}
+
+.btn-light:disabled {
+  color: var(--shade);
+  background: var(--wall-raised);
+}
+
+.btn-danger {
+  color: var(--alert);
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dusk);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.icon-btn:hover:not(:disabled) {
+  color: var(--plaster);
+  background: var(--wall-raised);
+}
+
+.icon-btn:disabled {
+  color: var(--shade);
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ---------- Segmented control (fit mode, library filter) ---------- */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--room);
+  border-radius: var(--radius-sm);
+}
+
+.segmented button {
+  height: 22px;
+  padding: 0 10px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--dusk);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.segmented button:hover {
+  color: var(--plaster);
+}
+
+.segmented button[aria-checked='true'] {
+  color: var(--plaster);
+  background: var(--wall-raised);
+}
+
+/* ---------- Range slider ----------
+   The filled part of the track uses the surface's own color; set --fill
+   (0-100%) inline. */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--surface-color, var(--plaster)) var(--fill, 0%),
+    var(--seam) var(--fill, 0%)
+  );
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--plaster);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.slider:focus-visible {
+  outline: none;
+}
+
+.slider:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--plaster);
+  outline-offset: 2px;
+}
+
+/* ---------- Text fields ---------- */
+.field {
+  width: 100%;
+  height: 30px;
+  padding: 0 9px;
+  font-size: var(--text-md);
+  background: var(--room);
+  border: 1px solid var(--seam);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.field:focus {
+  border-color: var(--surface-color, var(--plaster));
+}
+
+/* ---------- Media previews (MediaThumb) ----------
+   Fills a position: relative box: thumbnail or placeholder glyph, plus a
+   file-type badge pinned bottom-right. */
+.media-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.media-thumb-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--shade);
+}
+
+.media-badge {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 13px;
+  padding: 0 4px;
+  font-size: 8.5px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--plaster);
+  background: color-mix(in srgb, var(--room) 82%, transparent);
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+/* Videos get the bulb accent on their play glyph: it's moving light. */
+.media-badge.video svg {
+  color: var(--bulb);
+}
+
+.media-badge.unplayable,
+.media-badge.unplayable svg {
+  color: var(--alert);
+}
+
+/* ---------- Status text ---------- */
+.hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--dusk);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--alert);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+  }
+}

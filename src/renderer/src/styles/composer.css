@@ -1,0 +1,193 @@
+/* ---------- Cat's eyes (signature element) ----------
+   Each eye glows in its own color. --glow sets how far the light reaches;
+   the moods below only change that and the pupils. */
+.cat-eyes {
+  --glow: 2px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.cat-eyes .eye-left {
+  --eye: var(--eye-cyan);
+}
+
+.cat-eyes .eye-right {
+  --eye: var(--eye-magenta);
+}
+
+.cat-eyes .eye {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.cat-eyes .iris {
+  fill: color-mix(in srgb, var(--eye) 82%, var(--room));
+  filter: drop-shadow(0 0 var(--glow) color-mix(in srgb, var(--eye) 75%, transparent));
+  transition:
+    fill 0.5s var(--ease),
+    filter 0.5s var(--ease);
+}
+
+.cat-eyes .pupil {
+  fill: var(--room);
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: transform 0.5s var(--ease);
+}
+
+/* Live: full brightness, light reaching further. */
+.cat-eyes.live {
+  --glow: 4px;
+}
+
+.cat-eyes.live .iris,
+.cat-eyes.working .iris {
+  fill: var(--eye);
+}
+
+/* Working: pupils widen and the glow breathes while Cat generates. */
+.cat-eyes.working .pupil {
+  transform: scaleX(1.9);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The old slow blink, right eye a beat behind the left. */
+  .cat-eyes:not(.working) .eye {
+    animation: blink 4.5s ease-in-out infinite;
+  }
+
+  .cat-eyes:not(.working) .eye-right {
+    animation-delay: 0.06s;
+  }
+
+  .cat-eyes.working .iris {
+    animation: eyeshine 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.12);
+  }
+}
+
+@keyframes eyeshine {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--eye) 85%, transparent));
+  }
+  50% {
+    filter: drop-shadow(0 0 1px color-mix(in srgb, var(--eye) 40%, transparent));
+  }
+}
+
+/* ---------- Cat's prompt bar, docked under the stage ---------- */
+.composer-wrap {
+  flex-shrink: 0;
+  width: min(100%, 760px);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  container: composer / inline-size;
+}
+
+.composer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 8px 8px 16px;
+  background: var(--wall);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--plaster) 5%, transparent),
+    0 18px 40px -18px rgba(0, 0, 0, 0.6);
+  transition: box-shadow 0.15s var(--ease);
+}
+
+.composer:focus-within {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--surface-color, var(--plaster)) 55%, transparent),
+    0 18px 40px -18px rgba(0, 0, 0, 0.6);
+}
+
+.composer-target {
+  flex-shrink: 0;
+  max-width: 140px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 9px 0 8px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--plaster);
+  background: color-mix(in srgb, var(--surface-color) 16%, var(--room));
+  border-radius: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.target-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--surface-color);
+}
+
+.composer-input {
+  flex: 1;
+  min-width: 0;
+  /* Grows with its text, up to a few lines. */
+  field-sizing: content;
+  min-height: 22px;
+  max-height: 110px;
+  padding: 2px 0;
+  font-size: var(--text-lg);
+  line-height: 1.45;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+}
+
+.composer-input::placeholder {
+  color: var(--shade);
+}
+
+.composer-input:disabled {
+  cursor: default;
+}
+
+.composer-submit {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: var(--text-md);
+}
+
+/* Keep the button lit (but quieter) while Cat works, rather than greying out. */
+.composer.working .composer-submit:disabled {
+  color: var(--bulb-ink);
+  background: color-mix(in srgb, var(--bulb) 55%, var(--wall));
+}
+
+.composer-error {
+  padding: 0 16px;
+}
+
+/* Narrow stage (small window with the library open): the target chip is
+   the first thing to go (kept last in the file so it overrides the base rule) -- the surface stays highlighted in the list. */
+@container composer (max-width: 540px) {
+  .composer-target {
+    display: none;
+  }
+}
