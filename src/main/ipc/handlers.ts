@@ -1,14 +1,34 @@
-import { ipcMain, screen } from 'electron'
+import { BrowserWindow, dialog, ipcMain, screen } from 'electron'
 import { IpcChannels } from '../../shared/ipcChannels'
-import type { SceneState } from '../../shared/types'
+import type { SceneState, Surface } from '../../shared/types'
+import {
+  ASSET_ID_PATTERN,
+  PICKER_IMAGE_EXTENSIONS,
+  PICKER_VIDEO_EXTENSIONS,
+  type GeneratedImageImport,
+  type MediaImportResult,
+  type MediaProbeResult
+} from '../../shared/media'
 import { listDisplays } from '../displays'
 import { openOutputWindow, closeOutputWindow, getOutputWindow } from '../windows/outputWindow'
+import type { MediaLibrary } from '../media/mediaLibrary'
+import type { SceneAutosave } from '../persistence/sceneAutosave'
+
+/** Upper bound on one drag-and-drop batch, so a stray folder drop can't stall main. */
+const MAX_IMPORT_BATCH = 100
+
+interface HandlerDeps {
+  library: MediaLibrary
+  autosave: SceneAutosave
+  /** Surfaces read from disk at startup, handed to the control window once asked. */
+  savedSurfaces: Surface[] | null
+}
 
 // Last scene received from the control window, replayed to the output
 // window whenever it (re)opens so it doesn't start blank.
 let latestScene: SceneState | null = null
 
-export function registerIpcHandlers(): void {
+export function registerIpcHandlers({ library, autosave, savedSurfaces }: HandlerDeps): void {
   ipcMain.handle(IpcChannels.GetDisplays, () => listDisplays())
 
   ipcMain.handle(IpcChannels.OpenOutputWindow, (_event, displayId: number) => {
@@ -22,15 +42,93 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(IpcChannels.CloseOutputWindow, () => {
+    // latestScene is kept: it's still the current scene, and reopening the
+    // output window should show it immediately.
     closeOutputWindow()
-    latestScene = null
     return true
   })
 
   ipcMain.on(IpcChannels.SceneUpdate, (_event, scene: SceneState) => {
     latestScene = scene
     getOutputWindow()?.webContents.send(IpcChannels.SceneUpdate, scene)
+    autosave.schedule(scene)
   })
 
   ipcMain.handle(IpcChannels.SceneRequestSync, () => latestScene)
+
+  // Prefer the live scene: if the control window is reloaded (dev reload,
+  // or reopened from the dock on macOS) it should pick up where it left
+  // off, not jump back to what was on disk at launch.
+  ipcMain.handle(IpcChannels.SceneLoadSaved, () => latestScene?.surfaces ?? savedSurfaces)
+
+  // ---------- Media library ----------
+
+  ipcMain.handle(IpcChannels.MediaList, () => library.list())
+
+  ipcMain.handle(IpcChannels.MediaPickAndImport, async (event): Promise<MediaImportResult> => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = {
+      title: 'Add images and videos to MirrorCat',
+      properties: ['openFile', 'multiSelections'],
+      filters: [
+        {
+          name: 'Images and videos',
+          extensions: [...PICKER_IMAGE_EXTENSIONS, ...PICKER_VIDEO_EXTENSIONS]
+        },
+        { name: 'Images', extensions: PICKER_IMAGE_EXTENSIONS },
+        { name: 'Videos', extensions: PICKER_VIDEO_EXTENSIONS }
+      ]
+    }
+    const { canceled, filePaths } = parent
+      ? await dialog.showOpenDialog(parent, options)
+      : await dialog.showOpenDialog(options)
+    if (canceled || filePaths.length === 0) return { imported: [], errors: [] }
+    return library.importPaths(filePaths.slice(0, MAX_IMPORT_BATCH))
+  })
+
+  ipcMain.handle(IpcChannels.MediaImportPaths, (_event, paths: unknown) => {
+    const valid = Array.isArray(paths)
+      ? paths.filter((p): p is string => typeof p === 'string' && p.length > 0)
+      : []
+    return library.importPaths(valid.slice(0, MAX_IMPORT_BATCH))
+  })
+
+  ipcMain.handle(IpcChannels.MediaImportGenerated, (_event, data: GeneratedImageImport) => {
+    if (!(data?.bytes instanceof Uint8Array)) throw new Error('Expected image bytes')
+    const buf = Buffer.from(data.bytes.buffer, data.bytes.byteOffset, data.bytes.byteLength)
+    return library.importBuffer(buf, {
+      name: String(data.name ?? 'Generated'),
+      source: 'generated',
+      prompt: typeof data.prompt === 'string' ? data.prompt : undefined
+    })
+  })
+
+  ipcMain.handle(IpcChannels.MediaRename, (_event, id: unknown, name: unknown) => {
+    if (typeof id !== 'string' || !ASSET_ID_PATTERN.test(id) || typeof name !== 'string')
+      return null
+    return library.rename(id, name)
+  })
+
+  ipcMain.handle(IpcChannels.MediaAttachProbe, (_event, id: unknown, probe: MediaProbeResult) => {
+    if (
+      typeof id !== 'string' ||
+      !ASSET_ID_PATTERN.test(id) ||
+      !probe ||
+      typeof probe !== 'object'
+    ) {
+      return null
+    }
+    return library.attachProbe(id, probe)
+  })
+
+  ipcMain.handle(IpcChannels.MediaDelete, (_event, id: unknown) => {
+    if (typeof id !== 'string' || !ASSET_ID_PATTERN.test(id)) return false
+    return library.remove(id)
+  })
+
+  library.onChange((assets) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send(IpcChannels.MediaChanged, assets)
+    }
+  })
 }
