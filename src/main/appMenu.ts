@@ -1,0 +1,61 @@
+import { Menu, type MenuItemConstructorOptions } from 'electron'
+import { IpcChannels } from '../shared/ipcChannels'
+import type { EditCommand } from '../shared/types'
+import { getControlWindow } from './windows/controlWindow'
+
+/**
+ * The menu bar. Mostly Electron's stock roles, except Edit ▸ Undo / Redo:
+ * the stock ones only undo typing in text fields, so they never touched
+ * surface edits. Ours forward to the control window, which decides whether
+ * the command means "undo typing" (a text field has focus) or "undo the
+ * last surface change".
+ *
+ * They always go to the *control* window -- even when the projector window
+ * is focused -- because that's where the scene and its history live.
+ */
+export function installAppMenu(): void {
+  const send = (command: EditCommand) => (): void => {
+    getControlWindow()?.webContents.send(IpcChannels.EditCommand, command)
+  }
+
+  const isMac = process.platform === 'darwin'
+
+  const editMenu: MenuItemConstructorOptions = {
+    label: 'Edit',
+    submenu: [
+      { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: send('undo') },
+      {
+        label: 'Redo',
+        accelerator: isMac ? 'Shift+Cmd+Z' : 'Ctrl+Y',
+        click: send('redo')
+      },
+      // Windows/Linux users also expect Ctrl+Shift+Z; hidden duplicate.
+      ...(isMac
+        ? []
+        : [
+            {
+              label: 'Redo',
+              accelerator: 'Ctrl+Shift+Z',
+              click: send('redo'),
+              visible: false,
+              acceleratorWorksWhenHidden: true
+            } satisfies MenuItemConstructorOptions
+          ]),
+      { type: 'separator' },
+      { role: 'cut' },
+      { role: 'copy' },
+      { role: 'paste' },
+      { role: 'selectAll' }
+    ]
+  }
+
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac ? [{ role: 'appMenu' } satisfies MenuItemConstructorOptions] : []),
+    { role: 'fileMenu' },
+    editMenu,
+    { role: 'viewMenu' },
+    { role: 'windowMenu' }
+  ]
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
