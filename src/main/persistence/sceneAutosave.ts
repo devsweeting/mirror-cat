@@ -20,6 +20,8 @@ interface SavedScene {
   surfaces: Surface[]
 }
 
+type ReadResult = { kind: 'ok'; surfaces: Surface[] } | { kind: 'missing' } | { kind: 'corrupt' }
+
 /**
  * Keeps `<userData>/scene.json` in step with the control window. It piggybacks
  * on the existing scene:update stream (which already arrives batched to one
@@ -27,40 +29,55 @@ interface SavedScene {
  *
  * Only surfaces are saved: which display is projecting is a live hardware
  * state and is deliberately not restored on launch.
+ *
+ * Safety net: before the first write of each session, the file as it stood
+ * at launch is copied to `scene.prev.json` (only if it had surfaces). A bad
+ * start-up that writes an empty or default scene over a good calibration
+ * can then be recovered, and load() falls back to it if scene.json is
+ * missing or unreadable.
  */
 export class SceneAutosave {
   private pending: SceneState | null = null
   private timer: NodeJS.Timeout | null = null
   private writing: Promise<void> = Promise.resolve()
+  private inFlight = 0
+  private backedUp = false
+  private closed = false
 
   constructor(private readonly path: string) {}
 
+  get backupPath(): string {
+    return this.path.replace(/\.json$/, '') + '.prev.json'
+  }
+
+  /** True while a change is waiting to be written *or* a write is under way. */
   get hasPendingWrite(): boolean {
-    return this.pending !== null
+    return this.pending !== null || this.inFlight > 0
   }
 
   async load(): Promise<Surface[] | null> {
-    let raw: unknown
-    try {
-      raw = JSON.parse(await fs.readFile(this.path, 'utf8'))
-    } catch (error) {
-      if (isNotFound(error)) return null
+    const main = await readScene(this.path)
+    if (main.kind === 'ok') return main.surfaces
+    if (main.kind === 'corrupt') {
       const moved = await quarantine(this.path)
-      console.error(`[autosave] scene.json unreadable, moved to ${moved}`, error)
-      return null
+      console.error(`[autosave] scene.json unreadable, moved to ${moved}`)
     }
-    const surfaces = (raw as Partial<SavedScene>)?.surfaces
-    if (!Array.isArray(surfaces)) return null
-    return surfaces.map(normalizeSurface).filter((s): s is Surface => s !== null)
+    const backup = await readScene(this.backupPath)
+    if (backup.kind === 'ok') {
+      if (main.kind === 'corrupt') console.warn('[autosave] restored from scene.prev.json')
+      return backup.surfaces
+    }
+    return null
   }
 
   schedule(scene: SceneState): void {
+    if (this.closed) return
     this.pending = scene
     if (this.timer) clearTimeout(this.timer)
     this.timer = setTimeout(() => void this.flush(), SAVE_DELAY_MS)
   }
 
-  /** Write any pending change now (used on quit). */
+  /** Write any pending change now, and wait for any write already under way. */
   flush(): Promise<void> {
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
@@ -72,10 +89,48 @@ export class SceneAutosave {
       savedAt: Date.now(),
       surfaces: scene.surfaces
     }
+    this.inFlight += 1
     this.writing = this.writing
+      .then(() => this.backupOnce())
       .then(() => writeFileAtomic(this.path, JSON.stringify(data, null, 2)))
       .catch((error) => console.error('[autosave] write failed', error))
+      .finally(() => {
+        this.inFlight -= 1
+      })
     return this.writing
+  }
+
+  /** Final flush on quit; later scene updates are ignored. */
+  close(): Promise<void> {
+    const done = this.flush()
+    this.closed = true
+    return done
+  }
+
+  private async backupOnce(): Promise<void> {
+    if (this.backedUp) return
+    this.backedUp = true
+    // Only a file worth keeping replaces the backup -- otherwise two bad
+    // launches in a row would overwrite the good copy with the bad one.
+    const current = await readScene(this.path)
+    if (current.kind === 'ok' && current.surfaces.length > 0) {
+      await fs.copyFile(this.path, this.backupPath)
+    }
+  }
+}
+
+async function readScene(path: string): Promise<ReadResult> {
+  let raw: unknown
+  try {
+    raw = JSON.parse(await fs.readFile(path, 'utf8'))
+  } catch (error) {
+    return isNotFound(error) ? { kind: 'missing' } : { kind: 'corrupt' }
+  }
+  const surfaces = (raw as Partial<SavedScene>)?.surfaces
+  if (!Array.isArray(surfaces)) return { kind: 'corrupt' }
+  return {
+    kind: 'ok',
+    surfaces: surfaces.map((s) => normalizeSurface(s)).filter((s): s is Surface => s !== null)
   }
 }
 
@@ -84,7 +139,7 @@ export class SceneAutosave {
  * was written (so older saves keep loading) and drops anything too broken
  * to render, instead of crashing the editor on launch.
  */
-function normalizeSurface(value: unknown): Surface | null {
+export function normalizeSurface(value: unknown): Surface | null {
   if (!value || typeof value !== 'object') return null
   const s = value as Partial<Surface>
   if (typeof s.id !== 'string' || !Array.isArray(s.corners) || s.corners.length !== 4) return null

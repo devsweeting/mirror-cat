@@ -42,13 +42,13 @@ app.whenReady().then(async () => {
   })
 })
 
-// Write the last debounced change before exiting, so a quick edit-then-quit
-// isn't lost.
+// Write the last debounced change -- and let any write already under way
+// finish -- before exiting, so a quick edit-then-quit isn't lost.
 app.on('before-quit', (event) => {
   if (!autosave?.hasPendingWrite) return
   event.preventDefault()
   const pending = autosave
-  void pending.flush().finally(() => app.quit())
+  void pending.close().finally(() => app.quit())
 })
 
 app.on('window-all-closed', () => {
