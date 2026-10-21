@@ -79,6 +79,9 @@ export class ProjectionEngine {
    * re-upload our geometry and texture and skip drawing while it's gone.
    */
   private contextLost = false
+  private disposed = false
+  /** The <video> behind the current texture, if it's a video. */
+  private video: HTMLVideoElement | null = null
 
   constructor(
     private container: HTMLElement,
@@ -116,12 +119,29 @@ export class ProjectionEngine {
     this.resizeObserver.observe(container)
     this.resize()
 
-    this.frameId = requestAnimationFrame(this.renderLoop)
+    this.requestRender()
   }
 
-  private renderLoop = (): void => {
-    if (!this.contextLost) this.renderer.render(this.scene, this.camera)
-    this.frameId = requestAnimationFrame(this.renderLoop)
+  /**
+   * Draw on the next animation frame. Safe to call many times per frame;
+   * calls coalesce. Static content draws only when something changes --
+   * a full-window redraw 60 times a second per surface was pure GPU load
+   * (and fan noise) while calibrating.
+   */
+  private requestRender = (): void => {
+    if (this.frameId === null && !this.disposed) {
+      this.frameId = requestAnimationFrame(this.renderFrame)
+    }
+  }
+
+  private renderFrame = (): void => {
+    this.frameId = null
+    if (this.contextLost) return
+    this.renderer.render(this.scene, this.camera)
+    // A playing video changes every frame by itself, so keep going. Paused
+    // or finished videos stop; their 'play' / 'seeked' events wake us.
+    const video = this.video
+    if (video && !video.paused && !video.ended) this.requestRender()
   }
 
   private handleContextLost = (): void => {
@@ -133,6 +153,7 @@ export class ProjectionEngine {
     this.contextLost = false
     ;(this.mesh.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true
     if (this.texture) this.texture.needsUpdate = true
+    this.requestRender()
   }
 
   resize(): void {
@@ -147,6 +168,7 @@ export class ProjectionEngine {
     this.camera.bottom = clientHeight
     this.camera.updateProjectionMatrix()
     this.rebuildGeometry()
+    this.requestRender()
   }
 
   setShape(corners: CornerSet, edgeNodes: EdgeNodeSet): void {
@@ -158,6 +180,7 @@ export class ProjectionEngine {
   setOpacity(opacity: number): void {
     const material = this.mesh.material as THREE.MeshBasicMaterial
     material.opacity = Math.min(1, Math.max(0, opacity))
+    this.requestRender()
   }
 
   /** Largest texture edge this GPU accepts; bigger images render blank. */
@@ -168,16 +191,35 @@ export class ProjectionEngine {
   setTexture(texture: THREE.Texture | null): void {
     const material = this.mesh.material as THREE.MeshBasicMaterial
     if (this.texture) this.texture.dispose()
+    this.watchVideo(
+      texture instanceof THREE.VideoTexture ? (texture.image as HTMLVideoElement) : null
+    )
     this.texture = texture
     material.map = texture
     material.color.set(texture ? 0xffffff : PLACEHOLDER_COLOR)
     material.needsUpdate = true
     this.applyFit()
+    this.requestRender()
   }
 
   setFit(fit: SurfaceFit): void {
     this.fit = fit
     this.applyFit()
+    this.requestRender()
+  }
+
+  /** Redraw continuously while this video plays, and once after a seek. */
+  private watchVideo(video: HTMLVideoElement | null): void {
+    if (this.video === video) return
+    if (this.video) {
+      this.video.removeEventListener('play', this.requestRender)
+      this.video.removeEventListener('seeked', this.requestRender)
+    }
+    this.video = video
+    if (video) {
+      video.addEventListener('play', this.requestRender)
+      video.addEventListener('seeked', this.requestRender)
+    }
   }
 
   /**
@@ -242,11 +284,14 @@ export class ProjectionEngine {
     position.needsUpdate = true
     // The surface's proportions just changed, so a `fill` crop must too.
     if (this.fit === 'fill') this.applyFit()
+    this.requestRender()
   }
 
   dispose(): void {
+    this.disposed = true
     if (this.frameId !== null) cancelAnimationFrame(this.frameId)
     this.frameId = null
+    this.watchVideo(null)
     this.resizeObserver.disconnect()
     const canvas = this.renderer.domElement
     canvas.removeEventListener('webglcontextlost', this.handleContextLost)
