@@ -103,7 +103,10 @@ export default function ProjectionCanvas({
     if (!containerRef.current || contentless) return
     const engine = new ProjectionEngine(containerRef.current, surface.corners, surface.edgeNodes)
     engineRef.current = engine
-    return () => engine.dispose()
+    return () => {
+      engine.dispose()
+      if (engineRef.current === engine) engineRef.current = null
+    }
     // Only re-create the engine when the container mounts; shape/texture
     // updates are pushed imperatively below instead of re-mounting Three.js.
     // eslint-disable-next-line react-hooks/exhaustive-deps

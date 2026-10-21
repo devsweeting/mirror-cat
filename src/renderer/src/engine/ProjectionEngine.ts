@@ -72,6 +72,13 @@ export class ProjectionEngine {
   private edgeNodes: EdgeNodeSet
   private frameId: number | null = null
   private resizeObserver: ResizeObserver
+  /**
+   * Chromium allows only ~16 live WebGL contexts per page and silently
+   * kills the oldest past that (also on GPU resets and driver updates).
+   * Three.js restores its own GL state when the context comes back; we
+   * re-upload our geometry and texture and skip drawing while it's gone.
+   */
+  private contextLost = false
 
   constructor(
     private container: HTMLElement,
@@ -91,6 +98,8 @@ export class ProjectionEngine {
     // (outline, edge hit-strips, handles) into this container, and the
     // canvas must sit *under* it or it swallows clicks meant for the overlay.
     container.prepend(this.renderer.domElement)
+    this.renderer.domElement.addEventListener('webglcontextlost', this.handleContextLost)
+    this.renderer.domElement.addEventListener('webglcontextrestored', this.handleContextRestored)
 
     this.scene = new THREE.Scene()
     this.camera = new THREE.OrthographicCamera(0, 1, 0, 1, -10, 10)
@@ -111,8 +120,19 @@ export class ProjectionEngine {
   }
 
   private renderLoop = (): void => {
-    this.renderer.render(this.scene, this.camera)
+    if (!this.contextLost) this.renderer.render(this.scene, this.camera)
     this.frameId = requestAnimationFrame(this.renderLoop)
+  }
+
+  private handleContextLost = (): void => {
+    this.contextLost = true
+    console.warn('[engine] WebGL context lost; surface paused until it is restored')
+  }
+
+  private handleContextRestored = (): void => {
+    this.contextLost = false
+    ;(this.mesh.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true
+    if (this.texture) this.texture.needsUpdate = true
   }
 
   resize(): void {
@@ -226,11 +246,21 @@ export class ProjectionEngine {
 
   dispose(): void {
     if (this.frameId !== null) cancelAnimationFrame(this.frameId)
+    this.frameId = null
     this.resizeObserver.disconnect()
+    const canvas = this.renderer.domElement
+    canvas.removeEventListener('webglcontextlost', this.handleContextLost)
+    canvas.removeEventListener('webglcontextrestored', this.handleContextRestored)
     this.mesh.geometry.dispose()
     ;(this.mesh.material as THREE.Material).dispose()
     this.texture?.dispose()
+    this.texture = null
     this.renderer.dispose()
-    this.container.removeChild(this.renderer.domElement)
+    // renderer.dispose() frees GPU resources but not the context itself,
+    // which otherwise lingers until garbage collection. Adding/removing
+    // surfaces (and StrictMode's double mount in dev) would pile contexts
+    // up until Chromium starts killing live ones.
+    this.renderer.forceContextLoss()
+    canvas.remove()
   }
 }
