@@ -1,45 +1,22 @@
-import {
-  _electron as electron,
-  expect,
-  test,
-  type ElectronApplication,
-  type Page
-} from '@playwright/test'
-import { mkdtemp, rm } from 'fs/promises'
-import { tmpdir } from 'os'
-import { join } from 'path'
+import { expect, test } from '@playwright/test'
+import { importTestImage, launchApp, type Launched } from './helpers'
 
-let app: ElectronApplication
-let page: Page
-let userData: string
-const consoleProblems: string[] = []
+let ctx: Launched
 
 test.beforeAll(async () => {
-  userData = await mkdtemp(join(tmpdir(), 'mirrorcat-e2e-'))
-  app = await electron.launch({
-    args: ['.'],
-    env: { ...process.env, MIRRORCAT_USER_DATA: userData, NODE_ENV: 'production' }
-  })
-  page = await app.firstWindow()
-  page.on('console', (msg) => {
-    if (msg.type() === 'error' || /Content.Security.Policy|Refused to/i.test(msg.text())) {
-      consoleProblems.push(msg.text())
-    }
-  })
-  await page.waitForLoadState('domcontentloaded')
+  ctx = await launchApp()
 })
 
 test.afterAll(async () => {
-  await app?.close()
-  await rm(userData, { recursive: true, force: true })
+  await ctx?.close()
 })
 
 test('opens the editor', async () => {
-  await expect(page.getByText('Mirror Cat')).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Go live' })).toBeVisible()
+  await expect(ctx.page.getByRole('button', { name: 'Go live' })).toBeVisible()
 })
 
 test('runs with the production security settings', async () => {
+  const { app, page } = ctx
   const csp = await page
     .locator('meta[http-equiv="Content-Security-Policy"]')
     .getAttribute('content')
@@ -71,36 +48,45 @@ test('runs with the production security settings', async () => {
 })
 
 test('imports a generated image and serves it over mirrorcat-media under the CSP', async () => {
-  const result = await page.evaluate(async () => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 64
-    canvas.height = 32
-    canvas.getContext('2d')!.fillRect(0, 0, 64, 32)
-    const blob = await new Promise<Blob>((resolve) =>
-      canvas.toBlob((b) => resolve(b!), 'image/png')
-    )
-    const asset = await window.mirrorcat.media.importGenerated({
-      bytes: new Uint8Array(await blob.arrayBuffer()),
-      name: 'e2e'
-    })
-    const width = await new Promise<number>((resolve) => {
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      img.onload = () => resolve(img.naturalWidth)
-      img.onerror = () => resolve(-1)
-      img.src = `mirrorcat-media://asset/${asset.id}`
-    })
-    return { kind: asset.kind, width }
-  })
-  expect(result).toEqual({ kind: 'image', width: 64 })
+  const { page } = ctx
+  const id = await importTestImage(page, 'e2e')
+  const width = await page.evaluate(
+    (assetId) =>
+      new Promise<number>((resolve) => {
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        img.onload = () => resolve(img.naturalWidth)
+        img.onerror = () => resolve(-1)
+        img.src = `mirrorcat-media://asset/${assetId}`
+      }),
+    id
+  )
+  expect(width).toBe(64)
 })
 
 test('the stage draws with WebGL', async () => {
-  await expect(page.locator('canvas.projection-gl').first()).toBeVisible()
+  await expect(ctx.page.locator('canvas.projection-gl').first()).toBeVisible()
+})
+
+test('a file made in page script cannot be imported by dropping it', async () => {
+  const { page } = ctx
+  const before = await page.evaluate(() => window.mirrorcat.media.list().then((l) => l.length))
+  await page.evaluate(() => {
+    const data = new DataTransfer()
+    data.items.add(new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], 'fake.png'))
+    const stage = document.querySelector('.stage')!
+    for (const type of ['dragenter', 'dragover', 'drop']) {
+      stage.dispatchEvent(
+        new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true })
+      )
+    }
+  })
+  await page.waitForTimeout(500)
+  const after = await page.evaluate(() => window.mirrorcat.media.list().then((l) => l.length))
+  expect(after).toBe(before)
 })
 
 test('no console errors or CSP violations', async () => {
-  // Give late resource loads a moment to report.
-  await page.waitForTimeout(500)
-  expect(consoleProblems).toEqual([])
+  await ctx.page.waitForTimeout(500)
+  expect(ctx.problems).toEqual([])
 })
