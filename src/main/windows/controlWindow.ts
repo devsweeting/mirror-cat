@@ -1,5 +1,6 @@
 import { BrowserWindow, app, shell } from 'electron'
 import { join } from 'path'
+import { closeOutputWindow } from './outputWindow'
 
 let controlWindow: BrowserWindow | null = null
 
@@ -38,6 +39,11 @@ export function createControlWindow(): BrowserWindow {
   controlWindow = win
   win.on('closed', () => {
     if (controlWindow === win) controlWindow = null
+    // The projector window has no frame, no taskbar entry and no controls of
+    // its own, so it must never outlive the editor. On macOS the app keeps
+    // running after its last window closes, which would otherwise leave a
+    // fullscreen window on the projector that nothing can stop.
+    closeOutputWindow()
   })
 
   win.once('ready-to-show', () => win.show())

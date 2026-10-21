@@ -1,6 +1,6 @@
-import { app, BrowserWindow } from 'electron'
+import { app } from 'electron'
 import { join } from 'path'
-import { createControlWindow } from './windows/controlWindow'
+import { createControlWindow, getControlWindow } from './windows/controlWindow'
 import { closeOutputWindow } from './windows/outputWindow'
 import { registerIpcHandlers } from './ipc/handlers'
 import { installAppMenu } from './appMenu'
@@ -34,10 +34,11 @@ app.whenReady().then(async () => {
   installAppMenu()
   createControlWindow()
 
+  // Dock click on macOS: reopen the editor if it's gone. Checks for the
+  // editor specifically, not "any window" -- the projector window counts as
+  // a window but can't be used to edit anything.
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createControlWindow()
-    }
+    if (!getControlWindow()) createControlWindow()
   })
 })
 
