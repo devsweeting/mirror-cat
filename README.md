@@ -95,12 +95,28 @@ Details and reasoning for each item are in
 
 ## Checks and tests
 
+**Before merging, run `npm run verify`.** It runs typecheck, lint, unit
+tests with coverage, the build and the end-to-end tests, then prints a
+summary and the few checks that still need a person (real projector,
+Activity Monitor, a Finder drag). About 20 seconds; a MirrorCat window
+and a small projector window open briefly, against a throwaway data
+folder.
+
+- `npm run verify -- --quick` -- skip the build and e2e (no windows).
+- `npm run verify -- --package` -- also package the app
+  (`electron-builder --dir`, unsigned) and check its Electron fuses.
+- `npm run verify -- --bail` -- stop at the first failure.
+
+The individual steps:
+
 - `npm run check` -- typecheck, lint (warnings fail) and unit tests.
 - `npm run test:coverage` -- unit tests with a coverage report in
   `coverage/index.html`.
-- `npm run test:e2e` -- builds, then launches the app with Playwright
-  against a throwaway data folder (a MirrorCat window opens for a few
-  seconds).
+- `npm run test:e2e` -- builds, then drives the app with Playwright
+  (`e2e/`): projector lifecycle (Esc, Stop, unplug, close-while-live),
+  undo, render-on-demand, delete-in-use, autosave backup and
+  quit-flush, plus security settings. The projector opens as a small
+  window (`MIRRORCAT_OUTPUT_WINDOWED=1`), never fullscreen.
 
 CI runs typecheck, lint, coverage and build on every push
 (`.github/workflows/ci.yml`).

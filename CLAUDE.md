@@ -98,6 +98,11 @@ TypeScript + React + Three.js:
 - `npm run test:e2e` -- builds, then drives the built app with Playwright
   (`e2e/`), using a throwaway `MIRRORCAT_USER_DATA` folder.
 - `npm run check` -- typecheck + lint + unit tests; run before committing.
+- `npm run verify` -- everything (check + coverage + build + e2e) with a
+  summary; `-- --quick` skips build/e2e, `-- --package` also packages
+  and checks Electron fuses. Run before opening a PR.
+- `MIRRORCAT_OUTPUT_WINDOWED=1 npm run dev` -- projector view opens as a
+  small window instead of fullscreen (dev builds only).
 - `npm run build:mac` / `build:win` / `build:linux` -- packaged installer
   via electron-builder (config in `electron-builder.yml`).
 
