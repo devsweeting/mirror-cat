@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { DisplayInfo } from '@shared/types'
 import { useSceneStore } from '../state/sceneStore'
+import { ProjectorIcon } from './icons'
 
 interface ProjectorControlProps {
   displays: DisplayInfo[]
@@ -77,25 +78,7 @@ export default function ProjectorControl({
   return (
     <div className={`projector-control${live ? ' live' : ''}`}>
       <label className="projector-select">
-        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
-          <rect
-            x="1.5"
-            y="4.5"
-            width="13"
-            height="7"
-            rx="1.6"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.3"
-          />
-          <circle cx="10.5" cy="8" r="1.8" fill="none" stroke="currentColor" strokeWidth="1.3" />
-          <path
-            d="M4 11.5v1.5M12 11.5v1.5"
-            stroke="currentColor"
-            strokeWidth="1.3"
-            strokeLinecap="round"
-          />
-        </svg>
+        <ProjectorIcon />
         <span className="visually-hidden">Projector display</span>
         <select
           value={selectedDisplayId ?? ''}

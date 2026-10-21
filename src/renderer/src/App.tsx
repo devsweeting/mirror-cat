@@ -5,6 +5,7 @@ import CatEyes from './components/CatEyes'
 import ProjectorControl from './components/ProjectorControl'
 import PromptPanel from './components/PromptPanel'
 import LibraryPanel from './components/LibraryPanel'
+import { LibraryIcon } from './components/icons'
 import { useSceneStore } from './state/sceneStore'
 import {
   connectMediaLibrary,
@@ -170,48 +171,7 @@ export default function App() {
           aria-controls="media-library"
           title={libraryOpen ? 'Hide library' : 'Show library'}
         >
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-            <rect
-              x="2"
-              y="2"
-              width="5"
-              height="5"
-              rx="1"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.4"
-            />
-            <rect
-              x="9"
-              y="2"
-              width="5"
-              height="5"
-              rx="1"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.4"
-            />
-            <rect
-              x="2"
-              y="9"
-              width="5"
-              height="5"
-              rx="1"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.4"
-            />
-            <rect
-              x="9"
-              y="9"
-              width="5"
-              height="5"
-              rx="1"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.4"
-            />
-          </svg>
+          <LibraryIcon />
           Library
           {assetCount > 0 && <span className="topbar-count num">{assetCount}</span>}
         </button>
