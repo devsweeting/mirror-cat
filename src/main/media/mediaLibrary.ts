@@ -5,7 +5,10 @@ import { Transform } from 'stream'
 import { pipeline } from 'stream/promises'
 import { basename, extname, join } from 'path'
 import {
+  ACCEPTED_IMAGE_TYPES,
+  ACCEPTED_VIDEO_TYPES,
   ASSET_ID_PATTERN,
+  type AcceptedImageType,
   MAX_IMAGE_BYTES,
   MAX_VIDEO_BYTES,
   type AcceptedVideoType,
@@ -77,11 +80,10 @@ export class MediaLibrary {
     let indexLoaded = false
     try {
       const raw = JSON.parse(await fs.readFile(this.indexPath, 'utf8')) as Partial<LibraryIndex>
-      for (const asset of Array.isArray(raw.assets) ? raw.assets : []) {
-        if (asset && typeof asset.id === 'string' && ASSET_ID_PATTERN.test(asset.id)) {
-          // Entries written before video support have no `kind`.
-          this.assets.set(asset.id, { ...asset, kind: asset.kind === 'video' ? 'video' : 'image' })
-        }
+      for (const entry of Array.isArray(raw.assets) ? raw.assets : []) {
+        const asset = normalizeAsset(entry)
+        if (asset) this.assets.set(asset.id, asset)
+        else console.warn('[media] skipped an invalid library.json entry')
       }
       indexLoaded = true
     } catch (error) {
@@ -347,6 +349,54 @@ export class MediaLibrary {
     const assets = this.list()
     for (const listener of this.listeners) listener(assets)
   }
+}
+
+/**
+ * Defensive read of one library.json entry. `ext` becomes part of a file
+ * path and `mimeType` a response header, so neither is taken on trust:
+ * the type must be one we accept and the extension must be the one that
+ * type maps to. Entries written before video support have no `kind`; it's
+ * derived from the type.
+ */
+export function normalizeAsset(value: unknown): MediaAsset | null {
+  if (!value || typeof value !== 'object') return null
+  const a = value as Partial<Record<keyof MediaAsset, unknown>>
+  if (typeof a.id !== 'string' || !ASSET_ID_PATTERN.test(a.id)) return null
+
+  const mimeType = a.mimeType
+  let kind: MediaAsset['kind']
+  let ext: string
+  if (typeof mimeType === 'string' && mimeType in ACCEPTED_IMAGE_TYPES) {
+    kind = 'image'
+    ext = ACCEPTED_IMAGE_TYPES[mimeType as AcceptedImageType]
+  } else if (typeof mimeType === 'string' && mimeType in ACCEPTED_VIDEO_TYPES) {
+    kind = 'video'
+    ext = ACCEPTED_VIDEO_TYPES[mimeType as AcceptedVideoType]
+  } else {
+    return null
+  }
+  if (a.ext !== ext) return null
+
+  const count = (n: unknown): number =>
+    typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : 0
+  const asset: MediaAsset = {
+    id: a.id,
+    kind,
+    name: cleanName(typeof a.name === 'string' ? a.name : ''),
+    mimeType: mimeType as MediaAsset['mimeType'],
+    ext,
+    width: count(a.width),
+    height: count(a.height),
+    bytes: count(a.bytes),
+    source: a.source === 'generated' ? 'generated' : 'upload',
+    createdAt: count(a.createdAt),
+    hasThumbnail: a.hasThumbnail === true
+  }
+  if (typeof a.prompt === 'string') asset.prompt = a.prompt
+  if (typeof a.probed === 'boolean') asset.probed = a.probed
+  if (typeof a.playable === 'boolean') asset.playable = a.playable
+  if (isPositiveInt(a.durationMs)) asset.durationMs = a.durationMs
+  return asset
 }
 
 async function removeWithRetry(path: string): Promise<void> {

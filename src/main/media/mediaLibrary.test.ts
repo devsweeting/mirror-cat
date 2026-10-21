@@ -218,3 +218,44 @@ describe('start-up', () => {
     expect(reopened.list()).toEqual([])
   })
 })
+
+describe('normalizeAsset', () => {
+  const valid = {
+    id: 'c'.repeat(64),
+    kind: 'image',
+    name: 'Wall',
+    mimeType: 'image/jpeg',
+    ext: 'jpg',
+    width: 10,
+    height: 20,
+    bytes: 300,
+    source: 'upload',
+    createdAt: 5,
+    hasThumbnail: true,
+    probed: true
+  }
+
+  it('accepts a well-formed entry unchanged', async () => {
+    const { normalizeAsset } = await import('./mediaLibrary')
+    expect(normalizeAsset(valid)).toEqual(valid)
+  })
+
+  it('rejects a type we do not serve, or an extension that does not match it', async () => {
+    const { normalizeAsset } = await import('./mediaLibrary')
+    expect(normalizeAsset({ ...valid, mimeType: 'text/html', ext: 'html' })).toBeNull()
+    expect(normalizeAsset({ ...valid, ext: '../../../evil' })).toBeNull()
+    expect(normalizeAsset({ ...valid, ext: 'png' })).toBeNull()
+  })
+
+  it('derives kind from the type for entries written before video support', async () => {
+    const { normalizeAsset } = await import('./mediaLibrary')
+    const legacy = { ...valid, kind: undefined, mimeType: 'video/quicktime', ext: 'mov' }
+    expect(normalizeAsset(legacy)?.kind).toBe('video')
+  })
+
+  it('cleans up junk values instead of trusting them', async () => {
+    const { normalizeAsset } = await import('./mediaLibrary')
+    const asset = normalizeAsset({ ...valid, width: -4, bytes: 'lots', source: 'admin', name: 7 })
+    expect(asset).toMatchObject({ width: 0, bytes: 0, source: 'upload', name: 'Untitled' })
+  })
+})
