@@ -15,6 +15,16 @@ export function getOutputDisplayId(): number | null {
 }
 
 /**
+ * MIRRORCAT_OUTPUT_WINDOWED=1 opens the projector view as a small,
+ * ordinary window on the chosen display instead of borderless fullscreen.
+ * Lets the end-to-end tests go live without covering your screen, and is
+ * handy for trying things without a projector. Unpackaged builds only.
+ */
+function windowedForTesting(): boolean {
+  return !app.isPackaged && process.env.MIRRORCAT_OUTPUT_WINDOWED === '1'
+}
+
+/**
  * Opens (or replaces) the borderless, fullscreen window that mirrors
  * warped content onto a specific display -- this is the window that
  * actually faces the projector, kept separate from the control window
@@ -23,16 +33,28 @@ export function getOutputDisplayId(): number | null {
 export function openOutputWindow(display: Display): BrowserWindow {
   closeOutputWindow()
 
+  const placement = windowedForTesting()
+    ? {
+        x: display.bounds.x + 40,
+        y: display.bounds.y + 40,
+        width: 640,
+        height: 360,
+        title: 'MirrorCat projector (windowed)'
+      }
+    : {
+        x: display.bounds.x,
+        y: display.bounds.y,
+        width: display.bounds.width,
+        height: display.bounds.height,
+        frame: false,
+        fullscreen: true,
+        resizable: false,
+        movable: false,
+        skipTaskbar: true
+      }
+
   const win = new BrowserWindow({
-    x: display.bounds.x,
-    y: display.bounds.y,
-    width: display.bounds.width,
-    height: display.bounds.height,
-    frame: false,
-    fullscreen: true,
-    resizable: false,
-    movable: false,
-    skipTaskbar: true,
+    ...placement,
     backgroundColor: '#000000',
     webPreferences: {
       // Sandboxed: the preload is built as CommonJS (.cjs) for this, and
