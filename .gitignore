@@ -10,3 +10,4 @@ build/*.ico
 .env
 .env.local
 *.tsbuildinfo
+coverage
