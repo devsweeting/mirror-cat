@@ -24,6 +24,15 @@ const INDEX_VERSION = 1
 /** Longest side of a library thumbnail, in pixels (2x the grid tile size). */
 const THUMB_MAX = 320
 const MAX_NAME_LENGTH = 80
+/**
+ * Deleting a file another window is still streaming fails on Windows
+ * (EBUSY/EPERM) until that window lets go -- which it does as soon as the
+ * library change reaches it. Retry for a couple of seconds before giving up
+ * and leaving it for the start-up sweep.
+ */
+const DELETE_RETRY_DELAYS_MS = [100, 250, 500, 1000]
+/** Library file names: `<sha256>.<ext>` (originals) and `<sha256>.jpg` (thumbs). */
+const LIBRARY_FILE_PATTERN = /^([a-f0-9]{64})\.[a-z0-9]+$/
 
 interface LibraryIndex {
   version: number
@@ -65,6 +74,7 @@ export class MediaLibrary {
   async init(): Promise<void> {
     await fs.mkdir(this.filesDir, { recursive: true })
     await fs.mkdir(this.thumbsDir, { recursive: true })
+    let indexLoaded = false
     try {
       const raw = JSON.parse(await fs.readFile(this.indexPath, 'utf8')) as Partial<LibraryIndex>
       for (const asset of Array.isArray(raw.assets) ? raw.assets : []) {
@@ -73,10 +83,40 @@ export class MediaLibrary {
           this.assets.set(asset.id, { ...asset, kind: asset.kind === 'video' ? 'video' : 'image' })
         }
       }
+      indexLoaded = true
     } catch (error) {
       if (!isNotFound(error)) {
         const moved = await quarantine(this.indexPath)
         console.error(`[media] library.json unreadable, moved to ${moved}`, error)
+      }
+    }
+    // Only trust the index to decide what's an orphan when it actually
+    // loaded: with a missing or quarantined index, every file would look
+    // like one.
+    if (indexLoaded) await this.sweepOrphans()
+  }
+
+  /**
+   * Remove files nothing points at: originals and thumbs whose asset is no
+   * longer in the index (a delete that couldn't remove a locked file, or a
+   * crash between index write and file removal), and temp files left by an
+   * interrupted import or atomic write. Best effort; never fails start-up.
+   */
+  private async sweepOrphans(): Promise<void> {
+    for (const dir of [this.filesDir, this.thumbsDir]) {
+      let names: string[]
+      try {
+        names = await fs.readdir(dir)
+      } catch {
+        continue
+      }
+      for (const name of names) {
+        const match = LIBRARY_FILE_PATTERN.exec(name)
+        const orphan = match ? !this.assets.has(match[1]) : name.endsWith('.tmp')
+        if (!orphan) continue
+        await fs.rm(join(dir, name), { force: true }).catch((error) => {
+          console.warn(`[media] couldn't remove orphan ${name}`, error)
+        })
       }
     }
   }
@@ -258,11 +298,15 @@ export class MediaLibrary {
     const asset = this.assets.get(id)
     if (!asset) return false
     this.assets.delete(id)
+    // persist() also broadcasts the change, which is what makes every
+    // window drop its <video> / texture for this asset and release the file.
     await this.persist()
     // Files go after the index, so a crash in between leaves an orphan file
-    // (harmless) rather than an index entry pointing at nothing.
-    await fs.rm(this.filePath(asset), { force: true })
-    await fs.rm(this.thumbPath(asset), { force: true })
+    // (swept on next launch) rather than an index entry pointing at nothing.
+    // The asset is gone from the library either way, so a file that stays
+    // locked is logged, not reported as a failed delete.
+    await removeWithRetry(this.filePath(asset))
+    await removeWithRetry(this.thumbPath(asset))
     return true
   }
 
@@ -302,6 +346,23 @@ export class MediaLibrary {
   private emit(): void {
     const assets = this.list()
     for (const listener of this.listeners) listener(assets)
+  }
+}
+
+async function removeWithRetry(path: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fs.rm(path, { force: true })
+      return
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code
+      const retryable = code === 'EBUSY' || code === 'EPERM' || code === 'EACCES'
+      if (!retryable || attempt >= DELETE_RETRY_DELAYS_MS.length) {
+        console.warn(`[media] couldn't remove ${path}; will retry on next launch`, error)
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, DELETE_RETRY_DELAYS_MS[attempt]))
+    }
   }
 }
 

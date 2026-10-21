@@ -277,6 +277,11 @@ function AssetDetails({ asset, usedOn, target, onAssign, onDeleted }: AssetDetai
     try {
       await window.mirrorcat.media.remove(asset.id)
       onDeleted()
+    } catch (error) {
+      console.error('[media] delete failed', error)
+      useMediaStore.setState({
+        importErrors: [{ name: asset.name, message: 'Couldn’t delete this file. Try again.' }]
+      })
     } finally {
       setDeleting(false)
     }
