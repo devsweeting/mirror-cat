@@ -10,7 +10,8 @@ import { SceneAutosave } from './persistence/sceneAutosave'
 
 // Point the library + autosave at a scratch folder for tests and demos
 // without touching your real data: MIRRORCAT_USER_DATA=/tmp/x npm run dev
-if (process.env.MIRRORCAT_USER_DATA) {
+// Development builds only -- a packaged app ignores it.
+if (!app.isPackaged && process.env.MIRRORCAT_USER_DATA) {
   app.setPath('userData', process.env.MIRRORCAT_USER_DATA)
 }
 

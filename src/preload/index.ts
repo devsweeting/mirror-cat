@@ -88,13 +88,7 @@ const api = {
   media
 }
 
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('mirrorcat', api)
-  } catch (error) {
-    console.error(error)
-  }
-} else {
-  // @ts-expect-error -- fallback only used if contextIsolation is ever disabled
-  window.mirrorcat = api
-}
+// Both windows run with contextIsolation and sandbox on, so the API only
+// ever reaches the page through the bridge. There is deliberately no
+// fallback that puts it on `window` directly.
+contextBridge.exposeInMainWorld('mirrorcat', api)

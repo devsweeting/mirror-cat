@@ -29,10 +29,10 @@ export function openOutputWindow(display: Display): BrowserWindow {
     skipTaskbar: true,
     backgroundColor: '#000000',
     webPreferences: {
-      // See controlWindow.ts -- electron-vite emits the preload as .mjs
-      // under "type": "module".
-      preload: join(__dirname, '../preload/index.mjs'),
-      sandbox: false,
+      // Sandboxed: the preload is built as CommonJS (.cjs) for this, and
+      // only uses contextBridge, ipcRenderer and webUtils.
+      preload: join(__dirname, '../preload/index.cjs'),
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }

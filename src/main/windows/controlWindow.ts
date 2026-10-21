@@ -27,11 +27,10 @@ export function createControlWindow(): BrowserWindow {
       ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 19 } }
       : {}),
     webPreferences: {
-      // electron-vite builds the preload as ESM because package.json has
-      // "type": "module" (a CJS file can't be named .js in that mode) --
-      // Electron loads a .mjs preload as an ES module natively.
-      preload: join(__dirname, '../preload/index.mjs'),
-      sandbox: false,
+      // Sandboxed: the preload is built as CommonJS (.cjs) for this, and
+      // only uses contextBridge, ipcRenderer and webUtils.
+      preload: join(__dirname, '../preload/index.cjs'),
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
