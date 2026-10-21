@@ -15,8 +15,18 @@ const media = {
   pickAndImport: (): Promise<MediaImportResult> =>
     ipcRenderer.invoke(IpcChannels.MediaPickAndImport),
 
-  importPaths: (paths: string[]): Promise<MediaImportResult> =>
-    ipcRenderer.invoke(IpcChannels.MediaImportPaths, paths),
+  /**
+   * Import files dropped from the OS (Finder/Explorer). Paths are resolved
+   * here in the preload, never taken from the page: the page can only
+   * hand over File objects, and only a real OS drop gives a File a path
+   * (one built in JavaScript resolves to "" and is skipped). So page code
+   * can't make main read an arbitrary file off disk.
+   */
+  importFiles: (files: File[]): Promise<MediaImportResult> => {
+    const paths = files.map((file) => webUtils.getPathForFile(file)).filter((p) => p.length > 0)
+    if (paths.length === 0) return Promise.resolve({ imported: [], errors: [] })
+    return ipcRenderer.invoke(IpcChannels.MediaImportPaths, paths)
+  },
 
   importGenerated: (data: GeneratedImageImport): Promise<MediaAsset> =>
     ipcRenderer.invoke(IpcChannels.MediaImportGenerated, data),
@@ -74,12 +84,6 @@ const api = {
     ipcRenderer.on(IpcChannels.EditCommand, listener)
     return () => ipcRenderer.removeListener(IpcChannels.EditCommand, listener)
   },
-
-  /**
-   * Real filesystem path of a dropped File (File.path was removed from
-   * Electron). Empty string for files that don't exist on disk.
-   */
-  getPathForFile: (file: File): string => webUtils.getPathForFile(file),
 
   media
 }

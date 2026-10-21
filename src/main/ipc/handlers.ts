@@ -1,4 +1,5 @@
 import { BrowserWindow, dialog, ipcMain, screen } from 'electron'
+import { isAbsolute } from 'path'
 import { IpcChannels } from '../../shared/ipcChannels'
 import type { SceneState, Surface } from '../../shared/types'
 import {
@@ -93,9 +94,11 @@ export function registerIpcHandlers({ library, autosave, savedSurfaces }: Handle
     return library.importPaths(filePaths.slice(0, MAX_IMPORT_BATCH))
   })
 
+  // Only reachable through the preload's importFiles, which resolves dropped
+  // File objects to paths itself; still validated as if it weren't.
   ipcMain.handle(IpcChannels.MediaImportPaths, (_event, paths: unknown) => {
     const valid = Array.isArray(paths)
-      ? paths.filter((p): p is string => typeof p === 'string' && p.length > 0)
+      ? paths.filter((p): p is string => typeof p === 'string' && isAbsolute(p))
       : []
     return library.importPaths(valid.slice(0, MAX_IMPORT_BATCH))
   })

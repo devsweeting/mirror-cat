@@ -91,9 +91,7 @@ export function pickAndImport(): Promise<MediaAsset[]> {
 
 /** Import files dropped from the OS (Finder/Explorer). */
 export function importDroppedFiles(files: FileList | File[]): Promise<MediaAsset[]> {
-  const paths = Array.from(files)
-    .map((file) => window.mirrorcat.getPathForFile(file))
-    .filter((path) => path.length > 0)
-  if (paths.length === 0) return Promise.resolve([])
-  return runImport(() => window.mirrorcat.media.importPaths(paths))
+  const list = Array.from(files)
+  if (list.length === 0) return Promise.resolve([])
+  return runImport(() => window.mirrorcat.media.importFiles(list))
 }

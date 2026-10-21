@@ -9,7 +9,8 @@ import type {
 export interface MirrorCatMediaApi {
   list(): Promise<MediaAsset[]>
   pickAndImport(): Promise<MediaImportResult>
-  importPaths(paths: string[]): Promise<MediaImportResult>
+  /** Files from an OS drag-and-drop; paths are resolved inside the preload. */
+  importFiles(files: File[]): Promise<MediaImportResult>
   importGenerated(data: GeneratedImageImport): Promise<MediaAsset>
   rename(id: string, name: string): Promise<MediaAsset | null>
   remove(id: string): Promise<boolean>
@@ -27,7 +28,6 @@ export interface MirrorCatApi {
   requestSceneSync(): Promise<SceneState | null>
   loadSavedScene(): Promise<Surface[] | null>
   onEditCommand(callback: (command: EditCommand) => void): () => void
-  getPathForFile(file: File): string
   media: MirrorCatMediaApi
 }
 
