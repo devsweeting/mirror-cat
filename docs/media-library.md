@@ -211,11 +211,6 @@ scratch `MIRRORCAT_USER_DATA`:
 - **Videos larger than the GPU texture limit** (e.g. 8K) aren't
   downscaled.
 - **Library filter by kind** (Images / Videos).
-- **Orphan cleanup.** Delete files not in the index and stray
-  `files/.import-*.tmp` files on launch, left by a crash mid-import or
-  mid-delete.
 - **Library disk usage.** Show the total size; no cap today.
 - **Project export.** Bundle a scene plus the assets it references, for
   moving setups between machines.
-- **CSP:** when added, it needs `img-src 'self' mirrorcat-media:` and
-  `media-src 'self' mirrorcat-media:`, with `connect-src` to match.

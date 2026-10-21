@@ -61,10 +61,8 @@ Everything autosaves; close the app and it comes back as you left it.
 ## TODO
 
 **Next up**
-- [ ] Press Esc to stop projecting (the output window has no close button)
 - [ ] Preview mode: open the output as a normal window when the chosen
       display is the laptop screen
-- [ ] Handle the projector being unplugged (`display-removed`)
 - [ ] Pick a real AI provider (still images vs. video is the open question)
 - [ ] Guard against edge points folding the warp
 
@@ -79,21 +77,33 @@ Everything autosaves; close the app and it comes back as you left it.
 **Media & projects**
 - [ ] Sound for video surfaces
 - [ ] Named save / open and export of a scene with its media
-- [ ] Clean up orphaned media files; show disk usage
+- [ ] Show library disk usage
 
 **Performance & hardware**
 - [ ] One shared WebGL renderer per window (one context per surface today)
-- [ ] Render only on change instead of every frame
 - [ ] Multiple projectors (one output window per display)
 - [ ] Projector color / gamma calibration
 
 **Before shipping**
-- [ ] Content-Security-Policy in `src/renderer/index.html`
-- [ ] `sandbox: true` on both windows
-- [ ] Automated tests for `src/shared/surfaceGeometry.ts`, plus CI
+- [ ] Upgrade Electron to 45+ (moderate WebHID/WebUSB advisory; the app
+      doesn't use either)
+- [ ] Code signing + notarization, and a real app icon
+- [ ] Smoke-test a packaged build (`npm run build:mac`) on a clean machine
 
 Details and reasoning for each item are in
 [`docs/roadmap-and-risks.md`](docs/roadmap-and-risks.md).
+
+## Checks and tests
+
+- `npm run check` -- typecheck, lint (warnings fail) and unit tests.
+- `npm run test:coverage` -- unit tests with a coverage report in
+  `coverage/index.html`.
+- `npm run test:e2e` -- builds, then launches the app with Playwright
+  against a throwaway data folder (a MirrorCat window opens for a few
+  seconds).
+
+CI runs typecheck, lint, coverage and build on every push
+(`.github/workflows/ci.yml`).
 
 ## Documentation
 

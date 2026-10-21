@@ -145,8 +145,20 @@ shape for exactly this reason
 
 - `contextIsolation: true`, `nodeIntegration: false` on both windows. The
   renderer only sees the narrow `window.mirrorcat` API.
-- `sandbox: false` on both windows, and **no Content-Security-Policy** in
-  `src/renderer/index.html`. Both are deliberate MVP shortcuts and must be
-  fixed before shipping. See [roadmap](roadmap-and-risks.md).
-- External links open in the OS browser; the app window never navigates
-  away (`setWindowOpenHandler` in `controlWindow.ts`).
+- `sandbox: true` on both windows; the preload is built as CommonJS
+  (`out/preload/index.cjs`), which sandboxed preloads require.
+- A strict Content-Security-Policy is injected into the built
+  `index.html` (see `electron.vite.config.ts`); dev runs without one for
+  Vite's HMR. Media comes only from `mirrorcat-media:`.
+- IPC: anything that mutates the scene, library or projector must come
+  from the control window's top frame (`fromControlWindow` in
+  `ipc/handlers.ts`), and incoming scenes are validated
+  (`ipc/sceneValidation.ts`) before they're relayed or autosaved.
+- Dropped files are resolved to paths in the preload (`importFiles`), so
+  page code can't name files on disk.
+- Both windows are locked to the app page (`windows/security.ts`): only
+  `https:` links leave the app, in the OS browser; navigation elsewhere
+  and `<webview>` are blocked.
+- Packaged builds flip Electron fuses (`electron-builder.yml`): no
+  RunAsNode, no `NODE_OPTIONS`/`--inspect`, app loads only from an
+  integrity-checked `app.asar`.

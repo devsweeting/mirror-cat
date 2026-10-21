@@ -188,7 +188,7 @@ the main process via `safeStorage` (OS keychain), never in renderer
 storage.
 
 ## 013 Security hardening deferred to pre-ship
-*2026-09-01 · Accepted, temporary*
+*2026-09-01 · Superseded by [020](#020-phase-1-hardening-sandbox-csp-ipc-trust-fuses)*
 
 **Decision.** `sandbox: false` and no CSP during development, to avoid
 friction with the ESM preload and dev hot reload.
@@ -317,3 +317,34 @@ text fields.
 media, rename, reorder and surface deletion aren't undoable yet. Extending
 history to whole-surface snapshots is the natural next step, and the
 module's API wouldn't need to change.
+
+## 020 Phase 1 hardening: sandbox, CSP, IPC trust, fuses
+*2026-10-21 · Accepted*
+
+**Decision.** Both windows run with `sandbox: true` (preload built as
+`.cjs`). Packaged builds get a strict CSP injected at build time (dev
+keeps HMR). Only the control window may call mutating IPC; scenes are
+validated on the way in. Dropped-file paths are resolved in the preload.
+Windows are locked to the app page, external links must be `https:`.
+Electron fuses are flipped by electron-builder.
+
+**Why now.** Cheap to do before the AI provider lands; much harder once
+network calls and API keys are in the mix.
+
+**Verified by** `e2e/smoke.spec.ts` (sandbox, CSP, media under CSP, no
+console errors) and `@electron/fuses read` on a `--dir` package.
+
+## 021 Tests: Vitest for logic, Playwright for the built app
+*2026-10-21 · Accepted*
+
+**Decision.** Vitest 4 unit tests live next to the code
+(`src/**/*.test.ts`) and cover pure geometry, the byte sniffers (with a
+fuzz test), the media library and autosave against temp folders, scene
+validation, and renderer state (undo). React components and the WebGL
+engine are covered by one Playwright smoke test of the built app rather
+than unit tests. CI runs typecheck, lint, coverage and build on every
+push.
+
+**Why Vitest 4, not 5.** npm 10's resolver crashes on Vitest 5's optional
+peer set; Vitest 4 supports Vite 7 and everything used here. Revisit
+with the Vite 8 upgrade.

@@ -92,7 +92,12 @@ TypeScript + React + Three.js:
 - `npm run build` -- production bundle to `out/`.
 - `npm run typecheck` -- `tsc --noEmit` for both the node (main/preload)
   and web (renderer) TS projects.
-- `npm run lint` -- ESLint (flat config, `eslint.config.js`).
+- `npm run lint` -- ESLint (flat config, `eslint.config.js`); warnings fail.
+- `npm test` / `npm run test:watch` / `npm run test:coverage` -- Vitest
+  unit tests (`src/**/*.test.ts`, config in `vitest.config.ts`).
+- `npm run test:e2e` -- builds, then drives the built app with Playwright
+  (`e2e/`), using a throwaway `MIRRORCAT_USER_DATA` folder.
+- `npm run check` -- typecheck + lint + unit tests; run before committing.
 - `npm run build:mac` / `build:win` / `build:linux` -- packaged installer
   via electron-builder (config in `electron-builder.yml`).
 
@@ -100,6 +105,6 @@ TypeScript + React + Three.js:
 
 Persistence is autosave only (no named projects/export yet), videos are
 always muted and not frame-locked between editor and projector, no real
-AI provider wired in yet, no display-disconnect handling, single output
-window (one projector). Set `MIRRORCAT_USER_DATA=/some/tmp/dir` to run
+AI provider wired in yet, single output window (one projector), one
+WebGL context per surface. Set `MIRRORCAT_USER_DATA=/some/tmp/dir` to run
 against a scratch library and autosave instead of your real data.

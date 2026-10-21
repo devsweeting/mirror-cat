@@ -115,10 +115,13 @@ imports, the `mirrorcat-media://` protocol, and the debounced
 Exposes `window.mirrorcat` through `contextBridge`, a small typed API
 (`getDisplays`, `openOutputWindow`, `closeOutputWindow`,
 `sendSceneUpdate`, `onSceneUpdate`, `requestSceneSync`, `loadSavedScene`,
-`getPathForFile`, and a `media` namespace for the library).
+`onOutputClosed`, `onDisplaysChanged`, `onEditCommand`, and a `media`
+namespace for the library, whose `importFiles` resolves dropped files to
+paths inside the preload).
 Subscriptions return an unsubscribe function so React effects can clean up.
 
-Built as ESM (`index.mjs`) because `package.json` sets `"type": "module"`.
+Built as CommonJS (`index.cjs`) because both windows are sandboxed, and
+sandboxed preloads can't be ES modules.
 
 ### `index.d.ts`
 The `MirrorCatApi` type and the global `Window` augmentation, so renderer

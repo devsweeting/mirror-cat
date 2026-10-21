@@ -10,7 +10,6 @@ will cause a real problem if left; "gap" means a missing feature.
   ([media-library.md](media-library.md), decisions 014–017). Still to do:
   - per-surface sound for videos;
   - frame-locked editor/projector playback;
-  - orphan-file cleanup on launch;
   - a disk-usage readout;
   - named save-as/export of a scene with its media.
 - **Choose the AI provider (open product decision).** Still images or
@@ -40,11 +39,12 @@ will cause a real problem if left; "gap" means a missing feature.
 ## Rendering & performance
 
 - **One WebGL context per surface (risk at scale).** Browsers cap contexts
-  at roughly 16 per page. Move to one shared renderer and scene per
-  window, with one mesh per surface, before supporting more than about 10
-  surfaces.
-- **Continuous render loop.** Every engine renders every frame, even when
-  idle. Switch to render-on-change for battery and thermals.
+  at roughly 16 per page. Contexts are now released on dispose and a lost
+  context recovers, but more than ~15 visible surfaces will still lose
+  the oldest. Move to one shared renderer and scene per window, with one
+  mesh per surface, before supporting more than about 10 surfaces.
+- **Playing video keeps its surface redrawing every frame** (static
+  content renders only on change). A paused or finished video stops.
 - **Full-scene IPC sync.** Batched to one send per frame. Images are now
   referenced by id, so it's small; revisit only at many surfaces.
 - **Same image on several surfaces** is decoded and uploaded once per
@@ -52,34 +52,34 @@ will cause a real problem if left; "gap" means a missing feature.
 
 ## Output & hardware
 
-- **No way out of the output window (risk).** It's frameless and
-  fullscreen with no close button. Add Esc to stop projecting.
-- **Single-screen testing.** When the chosen display is the laptop's own
-  screen, open the output as a normal movable window (a preview) instead
-  of fullscreen on top of the editor.
-- **Display disconnect (risk).** Nothing listens for
-  `screen.on('display-removed')`. If the projector is unplugged, the
-  output window is left pointing at a display that no longer exists.
-  Close it, or move it back to the primary display.
+- **Single-screen testing.** Going live on the laptop's own screen now
+  asks first and Esc gets you out, but a movable preview window would be
+  friendlier for testing without a projector.
 - **Single output window.** One projector only. Multi-projector setups
   need one output window per display, each showing a subset of surfaces.
 - **No color/gamma calibration.** Projectors are dimmer and render color
   differently from monitors.
 
-## Security (must fix before shipping)
+## Security
 
-- Add a Content-Security-Policy to `src/renderer/index.html` (see the TODO
-  there). It must allow `img-src mirrorcat-media:` for the media library.
-- Enable `sandbox: true` on both windows. The preload only uses
-  `contextBridge` and `ipcRenderer`, both of which are sandbox-compatible.
+Sandbox, CSP, IPC sender checks, navigation lock and fuses are done
+([decision 020](decisions.md#020-phase-1-hardening-sandbox-csp-ipc-trust-fuses)).
+Still to do:
+
 - Keep any provider API key in the main process via `safeStorage`; never
-  expose it to the renderer.
+  expose it to the renderer. When a provider is added, its host goes in
+  the CSP's `connect-src` only if the renderer calls it directly (prefer
+  calling from main).
+- Upgrade Electron to 45+ for a moderate WebHID/WebUSB permission
+  advisory (unused by the app, so low urgency).
+- Code signing and notarization for distributed builds.
 
 ## Engineering hygiene
 
-- **No automated tests yet.** `src/shared/surfaceGeometry.ts` is pure and
-  dependency-free, and is the first candidate: a Vitest suite for "no
-  nodes equals bilinear", "patch passes through nodes", and insert/remove
-  rules. These were checked by hand during the edge-node work.
-- **No CI.** Typecheck plus lint plus geometry tests on each push would
-  catch most regressions.
+- **Tests and CI are in** ([decision 021](decisions.md#021-tests-vitest-for-logic-playwright-for-the-built-app)).
+  Gaps: no unit tests for React components or `ProjectionEngine`; the e2e
+  smoke test doesn't cover going live, drag-and-drop or video playback;
+  CI doesn't run the e2e test (it needs a display).
+- **Autosave recovery is manual.** `scene.prev.json` keeps the launch-time
+  scene, and loads automatically only when `scene.json` is missing or
+  corrupt. An in-app "restore previous session" would make it usable.
