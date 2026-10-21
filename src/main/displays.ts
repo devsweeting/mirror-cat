@@ -1,4 +1,7 @@
 import { screen } from 'electron'
+import { IpcChannels } from '../shared/ipcChannels'
+import { getControlWindow } from './windows/controlWindow'
+import { closeOutputWindow, getOutputDisplayId, getOutputWindow } from './windows/outputWindow'
 import type { DisplayInfo } from '../shared/types'
 
 /**
@@ -18,5 +21,24 @@ export function listDisplays(): DisplayInfo[] {
       bounds: d.bounds,
       isPrimary
     }
+  })
+}
+
+/**
+ * Projectors get unplugged, switched off and moved between ports
+ * mid-session. Keep the editor's display list current, and when the
+ * display being projected to disappears, close the projector window
+ * rather than let the OS shove it onto the laptop screen (the editor
+ * hears about that through output:closed).
+ */
+export function watchDisplays(): void {
+  const notify = (): void => {
+    getControlWindow()?.webContents.send(IpcChannels.DisplaysChanged, listDisplays())
+  }
+  screen.on('display-added', notify)
+  screen.on('display-metrics-changed', notify)
+  screen.on('display-removed', (_event, removed) => {
+    if (getOutputWindow() && getOutputDisplayId() === removed.id) closeOutputWindow()
+    notify()
   })
 }

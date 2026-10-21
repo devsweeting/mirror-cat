@@ -59,13 +59,21 @@ export default function App() {
   // Lives here (not in the sidebar) because the stage needs the chosen
   // display's shape to frame itself as the projector.
   useEffect(() => {
-    window.mirrorcat.getDisplays().then((list) => {
+    const apply = (list: DisplayInfo[]): void => {
       setDisplays(list)
-      // Default to a non-primary display when one exists -- that's almost
-      // always the projector, while the primary is the laptop screen.
-      const preferred = list.find((d) => !d.isPrimary) ?? list[0]
-      setSelectedDisplayId(preferred?.id ?? null)
-    })
+      // Keep the pick if that display is still there. Otherwise default to
+      // a non-primary display -- almost always the projector, while the
+      // primary is the laptop screen.
+      setSelectedDisplayId((current) => {
+        if (current !== null && list.some((d) => d.id === current)) return current
+        return (list.find((d) => !d.isPrimary) ?? list[0])?.id ?? null
+      })
+    }
+    window.mirrorcat
+      .getDisplays()
+      .then(apply)
+      .catch((error) => console.error('[displays] list failed', error))
+    return window.mirrorcat.onDisplaysChanged(apply)
   }, [])
 
   // While projecting, frame the display actually in use; otherwise the one

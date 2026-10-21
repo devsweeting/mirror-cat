@@ -1,5 +1,7 @@
 export const IpcChannels = {
   GetDisplays: 'displays:get',
+  /** Main → control window: a display was plugged in, removed or changed size. */
+  DisplaysChanged: 'displays:changed',
   OpenOutputWindow: 'output:open',
   CloseOutputWindow: 'output:close',
   /** Main → control window: the projector window closed (Esc, display gone, or Stop). */

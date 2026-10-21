@@ -4,6 +4,7 @@ import { createControlWindow, getControlWindow } from './windows/controlWindow'
 import { closeOutputWindow } from './windows/outputWindow'
 import { registerIpcHandlers } from './ipc/handlers'
 import { installAppMenu } from './appMenu'
+import { watchDisplays } from './displays'
 import { MediaLibrary } from './media/mediaLibrary'
 import { registerMediaProtocol, registerMediaSchemePrivileges } from './media/protocol'
 import { SceneAutosave } from './persistence/sceneAutosave'
@@ -33,6 +34,7 @@ app.whenReady().then(async () => {
   // Handlers before the window, so the renderer's first invoke can't race them.
   registerIpcHandlers({ library, autosave, savedSurfaces })
   installAppMenu()
+  watchDisplays()
   createControlWindow()
 
   // Dock click on macOS: reopen the editor if it's gone. Checks for the

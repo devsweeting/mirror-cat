@@ -50,6 +50,14 @@ const media = {
 const api = {
   getDisplays: (): Promise<DisplayInfo[]> => ipcRenderer.invoke(IpcChannels.GetDisplays),
 
+  /** A display was plugged in, removed or resized; receives the new list. */
+  onDisplaysChanged: (callback: (displays: DisplayInfo[]) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, displays: DisplayInfo[]): void =>
+      callback(displays)
+    ipcRenderer.on(IpcChannels.DisplaysChanged, listener)
+    return () => ipcRenderer.removeListener(IpcChannels.DisplaysChanged, listener)
+  },
+
   openOutputWindow: (displayId: number): Promise<boolean> =>
     ipcRenderer.invoke(IpcChannels.OpenOutputWindow, displayId),
 

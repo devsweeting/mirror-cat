@@ -20,6 +20,7 @@ export interface MirrorCatMediaApi {
 
 export interface MirrorCatApi {
   getDisplays(): Promise<DisplayInfo[]>
+  onDisplaysChanged(callback: (displays: DisplayInfo[]) => void): () => void
   openOutputWindow(displayId: number): Promise<boolean>
   closeOutputWindow(): Promise<boolean>
   onOutputClosed(callback: () => void): () => void

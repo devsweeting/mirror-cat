@@ -3,9 +3,15 @@ import { join } from 'path'
 import { hardenWindow } from './security'
 
 let outputWindow: BrowserWindow | null = null
+/** The display the projector window was opened on. */
+let outputDisplayId: number | null = null
 
 export function getOutputWindow(): BrowserWindow | null {
   return outputWindow
+}
+
+export function getOutputDisplayId(): number | null {
+  return outputWindow ? outputDisplayId : null
 }
 
 /**
@@ -38,6 +44,7 @@ export function openOutputWindow(display: Display): BrowserWindow {
     }
   })
   outputWindow = win
+  outputDisplayId = display.id
   hardenWindow(win)
 
   // Only clear the shared reference if it still points at *this* window --
