@@ -8,9 +8,12 @@ import type {
   Surface
 } from '../../shared/types'
 import { DEFAULT_OUTLINE_COLOR } from '../../shared/types'
+import { ASSET_ID_PATTERN } from '../../shared/media'
+import { MAX_EDGE_NODES } from '../../shared/surfaceGeometry'
 import { isNotFound, quarantine, writeFileAtomic } from '../fsUtil'
 
 const FILE_VERSION = 1
+const MAX_SURFACE_NAME = 120
 /** Long enough to coalesce a whole corner drag into one write. */
 const SAVE_DELAY_MS = 400
 
@@ -145,19 +148,26 @@ export function normalizeSurface(value: unknown): Surface | null {
   if (typeof s.id !== 'string' || !Array.isArray(s.corners) || s.corners.length !== 4) return null
   if (!s.corners.every(isCorner)) return null
 
+  let budget = MAX_EDGE_NODES
   const edgeNodes: EdgeNodeSet =
     Array.isArray(s.edgeNodes) && s.edgeNodes.length === 4
-      ? (s.edgeNodes.map((edge) =>
-          Array.isArray(edge) ? edge.filter(isEdgeNode) : []
-        ) as EdgeNodeSet)
+      ? (s.edgeNodes.map((edge) => {
+          const valid = Array.isArray(edge)
+            ? edge.filter(isEdgeNode).map((n) => ({ id: n.id, seq: n.seq, t: n.t, x: n.x, y: n.y }))
+            : []
+          const kept = valid.slice(0, Math.max(0, budget))
+          budget -= kept.length
+          return kept
+        }) as EdgeNodeSet)
       : [[], [], [], []]
 
   return {
     id: s.id,
-    name: typeof s.name === 'string' && s.name.trim() ? s.name : 'Surface',
+    name:
+      typeof s.name === 'string' && s.name.trim() ? s.name.slice(0, MAX_SURFACE_NAME) : 'Surface',
     corners: s.corners.map((c) => ({ x: c.x, y: c.y })) as CornerSet,
     edgeNodes,
-    assetId: typeof s.assetId === 'string' ? s.assetId : null,
+    assetId: typeof s.assetId === 'string' && ASSET_ID_PATTERN.test(s.assetId) ? s.assetId : null,
     fit: s.fit === 'fill' ? 'fill' : 'stretch',
     loop: s.loop !== false,
     playToken: 0,
