@@ -1,6 +1,7 @@
-import { BrowserWindow, app, shell } from 'electron'
+import { BrowserWindow, app } from 'electron'
 import { join } from 'path'
 import { closeOutputWindow } from './outputWindow'
+import { hardenWindow } from './security'
 
 let controlWindow: BrowserWindow | null = null
 
@@ -48,12 +49,9 @@ export function createControlWindow(): BrowserWindow {
 
   win.once('ready-to-show', () => win.show())
 
-  // Open external links (docs, provider dashboards, etc.) in the OS browser
-  // instead of navigating the app window.
-  win.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
+  // External https links (docs, provider dashboards) open in the OS
+  // browser; everything else that would leave the app page is blocked.
+  hardenWindow(win)
 
   const rendererUrl = process.env.ELECTRON_RENDERER_URL
   if (!app.isPackaged && rendererUrl) {

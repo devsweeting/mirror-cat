@@ -1,5 +1,6 @@
 import { BrowserWindow, app, type Display } from 'electron'
 import { join } from 'path'
+import { hardenWindow } from './security'
 
 let outputWindow: BrowserWindow | null = null
 
@@ -37,6 +38,7 @@ export function openOutputWindow(display: Display): BrowserWindow {
     }
   })
   outputWindow = win
+  hardenWindow(win)
 
   // Only clear the shared reference if it still points at *this* window --
   // an older window's close can resolve after a newer one has replaced it.
