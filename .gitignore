@@ -11,3 +11,5 @@ build/*.ico
 .env.local
 *.tsbuildinfo
 coverage
+test-results
+playwright-report
