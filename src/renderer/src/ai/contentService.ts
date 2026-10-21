@@ -1,14 +1,23 @@
-import type { GeneratedContent } from '@shared/types'
-
 export interface ContentGenerationRequest {
   prompt: string
   width?: number
   height?: number
 }
 
+/**
+ * Raw output of a provider. The caller saves it into the media library
+ * (window.mirrorcat.media.importGenerated), which makes it persistent and
+ * gives it an asset id to put on a surface.
+ */
+export interface GeneratedImage {
+  prompt: string
+  /** Encoded image (PNG, JPEG, WebP or GIF). */
+  bytes: Uint8Array
+}
+
 export interface ContentProvider {
   readonly name: string
-  generate(request: ContentGenerationRequest): Promise<GeneratedContent>
+  generate(request: ContentGenerationRequest): Promise<GeneratedImage>
 }
 
 /**
@@ -22,7 +31,11 @@ export interface ContentProvider {
 export class MockPatternProvider implements ContentProvider {
   readonly name = 'mock-pattern'
 
-  async generate({ prompt, width = 1024, height = 1024 }: ContentGenerationRequest): Promise<GeneratedContent> {
+  async generate({
+    prompt,
+    width = 1024,
+    height = 1024
+  }: ContentGenerationRequest): Promise<GeneratedImage> {
     const hash = hashString(prompt)
     const hueA = hash % 360
     const hueB = (hash * 7) % 360
@@ -55,12 +68,10 @@ export class MockPatternProvider implements ContentProvider {
     // even against this local mock provider.
     await new Promise((resolve) => setTimeout(resolve, 300))
 
-    return {
-      id: `content-${Date.now()}`,
-      prompt,
-      createdAt: Date.now(),
-      dataUrl: canvas.toDataURL('image/png')
-    }
+    const blob = await new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG encode failed'))), 'image/png')
+    )
+    return { prompt, bytes: new Uint8Array(await blob.arrayBuffer()) }
   }
 }
 

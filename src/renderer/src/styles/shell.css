@@ -1,0 +1,188 @@
+/* ---------- App shell + top bar ---------- */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The top bar is part of the dark room (same color as the stage), and on
+   macOS it's also the title bar: draggable, with the traffic lights inset
+   on the left. */
+.topbar {
+  flex-shrink: 0;
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px 0 18px;
+  background: var(--room);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+:root[data-platform='mac'] .topbar {
+  padding-left: 88px;
+}
+
+.topbar button,
+.topbar select,
+.topbar label,
+.topbar input {
+  -webkit-app-region: no-drag;
+}
+
+.topbar-spacer {
+  flex: 1;
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 650;
+  font-variation-settings: 'opsz' 24;
+  letter-spacing: -0.01em;
+}
+
+.topbar-library.active {
+  color: var(--plaster);
+  background: var(--wall-raised);
+}
+
+.topbar-count {
+  font-size: var(--text-xs);
+  color: var(--shade);
+}
+
+.topbar-library.active .topbar-count {
+  color: var(--dusk);
+}
+
+/* ---------- Projector control: display picker + go live ---------- */
+.projector-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--wall);
+  border-radius: calc(var(--radius-sm) + 3px);
+}
+
+.projector-select {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 26px 0 9px;
+  color: var(--dusk);
+  border-radius: var(--radius-sm);
+}
+
+.projector-select:hover:has(select:enabled) {
+  color: var(--plaster);
+  background: var(--wall-raised);
+}
+
+/* A native select keeps the real macOS menu; only the closed state is
+   restyled. The invisible-ish select fills the label so the whole pill is
+   the hit target. */
+.projector-select select {
+  -webkit-appearance: none;
+  appearance: none;
+  max-width: 220px;
+  padding: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--plaster);
+  background: transparent;
+  border: none;
+  outline: none;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.projector-select select:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.projector-select:has(select:focus-visible) {
+  outline: 2px solid var(--plaster);
+  outline-offset: 1px;
+}
+
+.select-caret {
+  position: absolute;
+  right: 11px;
+  top: 11px;
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+.projector-control.live .select-caret {
+  display: none;
+}
+
+.projector-control.live .projector-select {
+  padding-right: 10px;
+}
+
+.projector-stop {
+  background: transparent;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bulb);
+  box-shadow: 0 0 8px 1px color-mix(in srgb, var(--bulb) 70%, transparent);
+}
+
+.projector-error {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: 280px;
+  padding: 10px 12px;
+  background: var(--wall);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+/* Confirm before projecting onto the laptop's own screen. Same popover as
+   .projector-error, without the alert color. */
+.projector-confirm p {
+  margin: 0 0 10px;
+}
+
+.projector-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}

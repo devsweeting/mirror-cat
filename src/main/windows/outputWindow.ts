@@ -1,10 +1,27 @@
 import { BrowserWindow, app, type Display } from 'electron'
 import { join } from 'path'
+import { hardenWindow } from './security'
 
 let outputWindow: BrowserWindow | null = null
+/** The display the projector window was opened on. */
+let outputDisplayId: number | null = null
 
 export function getOutputWindow(): BrowserWindow | null {
   return outputWindow
+}
+
+export function getOutputDisplayId(): number | null {
+  return outputWindow ? outputDisplayId : null
+}
+
+/**
+ * MIRRORCAT_OUTPUT_WINDOWED=1 opens the projector view as a small,
+ * ordinary window on the chosen display instead of borderless fullscreen.
+ * Lets the end-to-end tests go live without covering your screen, and is
+ * handy for trying things without a projector. Unpackaged builds only.
+ */
+function windowedForTesting(): boolean {
+  return !app.isPackaged && process.env.MIRRORCAT_OUTPUT_WINDOWED === '1'
 }
 
 /**
@@ -16,32 +33,56 @@ export function getOutputWindow(): BrowserWindow | null {
 export function openOutputWindow(display: Display): BrowserWindow {
   closeOutputWindow()
 
+  const placement = windowedForTesting()
+    ? {
+        x: display.bounds.x + 40,
+        y: display.bounds.y + 40,
+        width: 640,
+        height: 360,
+        title: 'MirrorCat projector (windowed)'
+      }
+    : {
+        x: display.bounds.x,
+        y: display.bounds.y,
+        width: display.bounds.width,
+        height: display.bounds.height,
+        frame: false,
+        fullscreen: true,
+        resizable: false,
+        movable: false,
+        skipTaskbar: true
+      }
+
   const win = new BrowserWindow({
-    x: display.bounds.x,
-    y: display.bounds.y,
-    width: display.bounds.width,
-    height: display.bounds.height,
-    frame: false,
-    fullscreen: true,
-    resizable: false,
-    movable: false,
-    skipTaskbar: true,
+    ...placement,
     backgroundColor: '#000000',
     webPreferences: {
-      // See controlWindow.ts -- electron-vite emits the preload as .mjs
-      // under "type": "module".
-      preload: join(__dirname, '../preload/index.mjs'),
-      sandbox: false,
+      // Sandboxed: the preload is built as CommonJS (.cjs) for this, and
+      // only uses contextBridge, ipcRenderer and webUtils.
+      preload: join(__dirname, '../preload/index.cjs'),
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false
     }
   })
   outputWindow = win
+  outputDisplayId = display.id
+  hardenWindow(win)
 
   // Only clear the shared reference if it still points at *this* window --
   // an older window's close can resolve after a newer one has replaced it.
   win.on('closed', () => {
     if (outputWindow === win) outputWindow = null
+  })
+
+  // The window has no frame or controls, and on a single-screen setup it
+  // covers the editor completely. Esc always gets you out. Handled here in
+  // main rather than in the page so it works even if the renderer hangs.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape') {
+      event.preventDefault()
+      win.close()
+    }
   })
 
   const rendererUrl = process.env.ELECTRON_RENDERER_URL
