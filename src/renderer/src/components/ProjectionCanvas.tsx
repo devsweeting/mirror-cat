@@ -86,6 +86,19 @@ export default function ProjectionCanvas({
   // Shown next to the dragged corner while Shift is locking proportions.
   const [lockHint, setLockHint] = useState<{ index: number; label: string } | null>(null)
 
+  // If this canvas goes away mid-drag (surface deleted, hidden or
+  // deselected from the keyboard), pointerup never reaches it. Close the
+  // gesture anyway, or undo stays disabled for the rest of the session.
+  useEffect(
+    () => () => {
+      if (dragRef.current) {
+        dragRef.current = null
+        endShapeGesture()
+      }
+    },
+    []
+  )
+
   useEffect(() => {
     if (!containerRef.current || contentless) return
     const engine = new ProjectionEngine(containerRef.current, surface.corners, surface.edgeNodes)
