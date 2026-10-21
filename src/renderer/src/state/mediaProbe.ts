@@ -5,7 +5,11 @@ const THUMB_MAX = 320
 /** Give up on a file that hasn't produced a frame by then. */
 const PROBE_TIMEOUT_MS = 20_000
 
-const started = new Set<string>()
+/** A probe that throws (or whose result can't be saved) is retried this many times. */
+const MAX_ATTEMPTS = 2
+
+const attempts = new Map<string, number>()
+const inFlight = new Set<string>()
 let queue: Promise<void> = Promise.resolve()
 
 /**
@@ -16,13 +20,18 @@ let queue: Promise<void> = Promise.resolve()
  */
 export function probePendingAssets(assets: MediaAsset[]): void {
   for (const asset of assets) {
-    if (!needsProbe(asset) || started.has(asset.id)) continue
-    started.add(asset.id)
+    if (!needsProbe(asset) || inFlight.has(asset.id)) continue
+    const tries = attempts.get(asset.id) ?? 0
+    if (tries >= MAX_ATTEMPTS) continue
+    attempts.set(asset.id, tries + 1)
+    inFlight.add(asset.id)
     queue = queue
       .then(() => probeAsset(asset))
       .then((result) => window.mirrorcat.media.attachProbe(asset.id, result))
       .then(() => undefined)
+      // Left unprobed, it's picked up again on the next library change.
       .catch((error) => console.error(`[media] probe failed for ${asset.id}`, error))
+      .finally(() => inFlight.delete(asset.id))
   }
 }
 
@@ -89,10 +98,18 @@ async function probeImage(url: string): Promise<MediaProbeResult> {
   const img = new Image()
   img.crossOrigin = 'anonymous'
   img.src = url
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('timed out')), PROBE_TIMEOUT_MS)
+  })
   try {
-    await img.decode()
+    // A stuck decode would otherwise block every probe queued behind it.
+    await Promise.race([img.decode(), timedOut])
   } catch {
+    img.src = ''
     return UNPLAYABLE
+  } finally {
+    clearTimeout(timer)
   }
   const thumbnail = await encodeThumbnail(img, img.naturalWidth, img.naturalHeight)
   return { width: img.naturalWidth, height: img.naturalHeight, playable: true, thumbnail }
