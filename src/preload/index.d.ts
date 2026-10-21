@@ -21,6 +21,7 @@ export interface MirrorCatApi {
   getDisplays(): Promise<DisplayInfo[]>
   openOutputWindow(displayId: number): Promise<boolean>
   closeOutputWindow(): Promise<boolean>
+  onOutputClosed(callback: () => void): () => void
   sendSceneUpdate(scene: SceneState): void
   onSceneUpdate(callback: (scene: SceneState) => void): () => void
   requestSceneSync(): Promise<SceneState | null>

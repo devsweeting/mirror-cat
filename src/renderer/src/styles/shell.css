@@ -174,3 +174,15 @@
   border-radius: var(--radius-md);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
+
+/* Confirm before projecting onto the laptop's own screen. Same popover as
+   .projector-error, without the alert color. */
+.projector-confirm p {
+  margin: 0 0 10px;
+}
+
+.projector-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}

@@ -11,6 +11,7 @@ import {
 } from '../../shared/media'
 import { listDisplays } from '../displays'
 import { openOutputWindow, closeOutputWindow, getOutputWindow } from '../windows/outputWindow'
+import { getControlWindow } from '../windows/controlWindow'
 import type { MediaLibrary } from '../media/mediaLibrary'
 import type { SceneAutosave } from '../persistence/sceneAutosave'
 
@@ -37,6 +38,12 @@ export function registerIpcHandlers({ library, autosave, savedSurfaces }: Handle
     const win = openOutputWindow(display)
     win.webContents.once('did-finish-load', () => {
       if (latestScene) win.webContents.send(IpcChannels.SceneUpdate, latestScene)
+    })
+    // However it closed (Esc, Stop, display unplugged), tell the editor so
+    // "Live" doesn't stay lit. Skipped when a newer projector window has
+    // already replaced this one: the editor is still live on that one.
+    win.on('closed', () => {
+      if (!getOutputWindow()) getControlWindow()?.webContents.send(IpcChannels.OutputClosed)
     })
     return true
   })

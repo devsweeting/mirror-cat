@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { DisplayInfo } from '@shared/types'
 import { useSceneStore } from '../state/sceneStore'
 
@@ -23,10 +23,31 @@ export default function ProjectorControl({
   const setOutputDisplayId = useSceneStore((s) => s.setOutputDisplayId)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Going live on the laptop's own screen covers the editor with a
+  // borderless fullscreen window, so that one asks first.
+  const [confirmingPrimary, setConfirmingPrimary] = useState(false)
   const live = outputDisplayId !== null
+  const selectedIsPrimary = displays.find((d) => d.id === selectedDisplayId)?.isPrimary ?? false
+
+  // The projector window can close without the Stop button: Esc on it, or
+  // the display being unplugged.
+  useEffect(
+    () => window.mirrorcat.onOutputClosed(() => setOutputDisplayId(null)),
+    [setOutputDisplayId]
+  )
+
+  const requestGoLive = (): void => {
+    if (selectedIsPrimary) {
+      setError(null)
+      setConfirmingPrimary(true)
+      return
+    }
+    void goLive()
+  }
 
   const goLive = async (): Promise<void> => {
     if (selectedDisplayId === null) return
+    setConfirmingPrimary(false)
     setBusy(true)
     setError(null)
     try {
@@ -78,7 +99,10 @@ export default function ProjectorControl({
         <span className="visually-hidden">Projector display</span>
         <select
           value={selectedDisplayId ?? ''}
-          onChange={(e) => onSelectDisplay(Number(e.target.value))}
+          onChange={(e) => {
+            setConfirmingPrimary(false)
+            onSelectDisplay(Number(e.target.value))
+          }}
           disabled={live || busy || displays.length === 0}
           title={
             live ? 'Stop projecting to change the display' : 'Display connected to your projector'
@@ -109,11 +133,40 @@ export default function ProjectorControl({
         <button
           type="button"
           className="btn btn-light"
-          onClick={() => void goLive()}
+          onClick={requestGoLive}
           disabled={busy || selectedDisplayId === null}
+          aria-expanded={confirmingPrimary}
         >
           Go live
         </button>
+      )}
+
+      {confirmingPrimary && !live && (
+        <div
+          className="projector-error projector-confirm"
+          role="alertdialog"
+          aria-label="Project onto this screen?"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setConfirmingPrimary(false)
+          }}
+        >
+          <p>
+            This screen will go fully black with your surfaces on it, covering the editor. Press Esc
+            to stop projecting.
+          </p>
+          <div className="projector-confirm-actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setConfirmingPrimary(false)}
+            >
+              Cancel
+            </button>
+            <button type="button" className="btn btn-light" autoFocus onClick={() => void goLive()}>
+              Cover this screen
+            </button>
+          </div>
+        </div>
       )}
 
       {error && (

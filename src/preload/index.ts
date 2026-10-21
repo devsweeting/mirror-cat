@@ -45,6 +45,13 @@ const api = {
 
   closeOutputWindow: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.CloseOutputWindow),
 
+  /** The projector window closed by any route (Esc, Stop, display unplugged). */
+  onOutputClosed: (callback: () => void): (() => void) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(IpcChannels.OutputClosed, listener)
+    return () => ipcRenderer.removeListener(IpcChannels.OutputClosed, listener)
+  },
+
   sendSceneUpdate: (scene: SceneState): void => {
     ipcRenderer.send(IpcChannels.SceneUpdate, scene)
   },

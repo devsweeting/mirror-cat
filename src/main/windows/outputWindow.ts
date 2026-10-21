@@ -44,6 +44,16 @@ export function openOutputWindow(display: Display): BrowserWindow {
     if (outputWindow === win) outputWindow = null
   })
 
+  // The window has no frame or controls, and on a single-screen setup it
+  // covers the editor completely. Esc always gets you out. Handled here in
+  // main rather than in the page so it works even if the renderer hangs.
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape') {
+      event.preventDefault()
+      win.close()
+    }
+  })
+
   const rendererUrl = process.env.ELECTRON_RENDERER_URL
   if (!app.isPackaged && rendererUrl) {
     win.loadURL(`${rendererUrl}#/output`)

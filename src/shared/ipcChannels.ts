@@ -2,6 +2,8 @@ export const IpcChannels = {
   GetDisplays: 'displays:get',
   OpenOutputWindow: 'output:open',
   CloseOutputWindow: 'output:close',
+  /** Main → control window: the projector window closed (Esc, display gone, or Stop). */
+  OutputClosed: 'output:closed',
   SceneUpdate: 'scene:update',
   SceneRequestSync: 'scene:request-sync',
   /** Surfaces from the last autosave, read once by the control window on launch. */
