@@ -22,6 +22,9 @@ to add or change a feature:
 
 ## Architecture
 
+Long-form docs live in `docs/` (architecture, components, surfaces & warping,
+decisions log, roadmap). Keep them in sync with code changes.
+
 Standard Electron three-process split, scaffolded with `electron-vite` +
 TypeScript + React + Three.js:
 
@@ -36,7 +39,16 @@ TypeScript + React + Three.js:
   - `ipc/handlers.ts` wires both together: the control window pushes
     scene updates over IPC, main relays them to the output window if one
     is open, and also caches the latest scene so a newly (re)opened
-    output window isn't blank.
+    output window isn't blank. Each update is also autosaved (debounced)
+    to `userData/scene.json` by `persistence/sceneAutosave.ts`.
+  - `media/`: the app-wide **media library** (images + MP4/MOV/WebM
+    video). Files are stored content-addressed in `userData/media`, with
+    videos streamed in. They're served to both windows on the
+    range-capable `mirrorcat-media://asset|thumb/<id>` protocol. The
+    control window probes videos (size, duration, playability, poster
+    frame) and reports back via `media:attach-probe`. Surfaces hold only
+    `assetId` (+ `fit`, `loop`, `playToken`); media never travels over
+    scene IPC. Long form: `docs/media-library.md`.
 
 - `src/preload/index.ts` -- the only bridge between renderer and Node.
   `contextIsolation: true`, `nodeIntegration: false`. Exposes a narrow
@@ -49,12 +61,15 @@ TypeScript + React + Three.js:
   `index.html#/output`, no editing chrome). They share
   `components/ProjectionCanvas.tsx`.
 
-  - `engine/ProjectionEngine.ts` -- the actual projection-mapping math.
-    Builds a subdivided Three.js mesh whose 4 corners are bilinearly
-    interpolated between draggable corner-pin points, rendered with an
-    orthographic camera sized to the container in pixels. This is what
-    lets a flat rectangular image get warped onto an off-axis or
-    irregular real surface.
+  - `engine/ProjectionEngine.ts` -- owns the Three.js renderer for one
+    surface: a 48×48 subdivided mesh rendered with an orthographic camera
+    sized to the container in pixels.
+  - `shared/surfaceGeometry.ts` -- the projection-mapping math (no Three.js
+    dependency). A surface is 4 corner pins plus optional **edge nodes** on
+    each edge (`Surface.edgeNodes`, edge i runs corner i → corner i+1).
+    The mesh is a Coons patch over the four edge polylines; with no nodes
+    it is exactly the classic bilinear quad warp. Each node stores a fixed
+    content parameter `t` along its edge plus a draggable frame position.
   - `ai/contentService.ts` -- `ContentProvider` interface + a
     `MockPatternProvider` placeholder (procedural canvas gradient, no
     network call). Swap in a real generative backend by implementing
@@ -77,12 +92,24 @@ TypeScript + React + Three.js:
 - `npm run build` -- production bundle to `out/`.
 - `npm run typecheck` -- `tsc --noEmit` for both the node (main/preload)
   and web (renderer) TS projects.
-- `npm run lint` -- ESLint (flat config, `eslint.config.js`).
+- `npm run lint` -- ESLint (flat config, `eslint.config.js`); warnings fail.
+- `npm test` / `npm run test:watch` / `npm run test:coverage` -- Vitest
+  unit tests (`src/**/*.test.ts`, config in `vitest.config.ts`).
+- `npm run test:e2e` -- builds, then drives the built app with Playwright
+  (`e2e/`), using a throwaway `MIRRORCAT_USER_DATA` folder.
+- `npm run check` -- typecheck + lint + unit tests; run before committing.
+- `npm run verify` -- everything (check + coverage + build + e2e) with a
+  summary; `-- --quick` skips build/e2e, `-- --package` also packages
+  and checks Electron fuses. Run before opening a PR.
+- `MIRRORCAT_OUTPUT_WINDOWED=1 npm run dev` -- projector view opens as a
+  small window instead of fullscreen (dev builds only).
 - `npm run build:mac` / `build:win` / `build:linux` -- packaged installer
   via electron-builder (config in `electron-builder.yml`).
 
 ## Known gaps (see README "Roadmap & known risks" for detail)
 
-No persistence (surfaces/content/calibration are lost on quit), no real
-AI provider wired in yet, no display-disconnect handling, unthrottled
-IPC scene sync, single output window (one projector).
+Persistence is autosave only (no named projects/export yet), videos are
+always muted and not frame-locked between editor and projector, no real
+AI provider wired in yet, single output window (one projector), one
+WebGL context per surface. Set `MIRRORCAT_USER_DATA=/some/tmp/dir` to run
+against a scratch library and autosave instead of your real data.

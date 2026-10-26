@@ -1,0 +1,596 @@
+/* ---------- Side panels (surfaces on the left, library on the right) ---------- */
+.sidebar {
+  width: 272px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 10px 14px;
+  overflow-y: auto;
+  background: var(--wall);
+  border-top-right-radius: var(--radius-lg);
+}
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 16px 6px 10px;
+}
+
+.panel-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  font-variation-settings: 'opsz' 20;
+  letter-spacing: -0.005em;
+}
+
+.panel-count {
+  font-size: var(--text-sm);
+  color: var(--shade);
+}
+
+.panel-close {
+  margin-left: auto;
+  align-self: center;
+}
+
+/* ---------- Surface list ---------- */
+.surface-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.surface-item {
+  position: relative;
+  border-radius: var(--radius-md);
+}
+
+/* ---------- Restacking (drag a row) ---------- */
+.surface-row[draggable='true'] {
+  cursor: grab;
+}
+
+.surface-item.dragging {
+  opacity: 0.45;
+}
+
+/* Insertion line between rows, where the dragged surface will land. */
+.surface-item.drop-above::before,
+.surface-item.drop-below::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  z-index: 1;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--plaster);
+  box-shadow: 0 0 0 2px var(--wall);
+  pointer-events: none;
+}
+
+.surface-item.drop-above::before {
+  top: -2px;
+}
+
+.surface-item.drop-below::after {
+  bottom: -2px;
+}
+
+.surface-item.open {
+  background: color-mix(in srgb, var(--room) 55%, var(--wall));
+}
+
+.surface-row {
+  display: flex;
+  align-items: stretch;
+  height: 40px;
+  border-radius: var(--radius-md);
+}
+
+.surface-row:hover {
+  background: var(--wall-raised);
+}
+
+.surface-item.active > .surface-row {
+  background: color-mix(in srgb, var(--surface-color) 13%, var(--wall-raised));
+}
+
+.surface-row button {
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.visibility-toggle {
+  width: 30px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+/* Filled = visible, hollow ring = hidden. */
+.visibility-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-color);
+  background: var(--surface-color);
+  transition:
+    background-color 0.12s var(--ease),
+    transform 0.12s var(--ease);
+}
+
+.visibility-toggle[aria-pressed='false'] .visibility-dot {
+  background: transparent;
+}
+
+.visibility-toggle:hover .visibility-dot {
+  transform: scale(1.25);
+}
+
+.surface-row .surface-header {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 0 0;
+  text-align: left;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.surface-thumb {
+  width: 34px;
+  height: 22px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  /* Empty slot: a faint hatch in the surface's color. */
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--surface-color) 22%, transparent) 0 2px,
+      transparent 2px 6px
+    ),
+    var(--room);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--surface-color) 35%, transparent);
+}
+
+.surface-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.surface-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.surface-item.active .surface-name {
+  font-weight: 600;
+}
+
+.surface-item.hidden-surface .surface-name,
+.surface-item.hidden-surface .surface-thumb {
+  opacity: 0.45;
+}
+
+/* Caret drawn with borders so it follows the text color. Down when
+   closed, up when open. */
+.surface-header .chevron {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  margin-bottom: 3px;
+  border-right: 1.5px solid var(--shade);
+  border-bottom: 1.5px solid var(--shade);
+  transform: rotate(45deg);
+  transition: transform 0.15s var(--ease);
+}
+
+.surface-header[aria-expanded='true'] .chevron {
+  margin-bottom: -3px;
+  transform: rotate(-135deg);
+}
+
+.add-surface {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  margin-top: 2px;
+  padding: 0 10px;
+  font-size: var(--text-md);
+  color: var(--dusk);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.add-surface:hover {
+  color: var(--plaster);
+  background: var(--wall-raised);
+}
+
+/* ---------- Surface settings drawer ---------- */
+.surface-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 6px 12px 14px 14px;
+}
+
+.drawer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.drawer-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.drawer-label {
+  font-size: var(--text-sm);
+  color: var(--dusk);
+}
+
+.drawer-value {
+  font-size: var(--text-sm);
+  color: var(--plaster);
+}
+
+.drawer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  min-height: 28px;
+  margin-bottom: -6px;
+}
+
+.rename-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+}
+
+.delete-confirm {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  font-size: var(--text-sm);
+  color: var(--plaster);
+  background: color-mix(in srgb, var(--alert) 8%, var(--room));
+  border-radius: var(--radius-sm);
+}
+
+.delete-confirm-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.delete-confirm-actions .btn {
+  height: 26px;
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.swatch {
+  position: relative;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--swatch);
+  cursor: pointer;
+}
+
+.swatch[aria-checked='true'],
+.swatch.checked {
+  box-shadow:
+    0 0 0 2px var(--room),
+    0 0 0 3.5px var(--plaster);
+}
+
+/* Custom color: a conic "any color" wheel until a custom color is picked. */
+.swatch-custom {
+  background: var(--swatch, conic-gradient(#ff6b6b, #ffd166, #7bd88f, #4d9fff, #b388ff, #ff6b6b));
+  overflow: hidden;
+}
+
+.swatch-custom input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.swatch-custom:has(input:focus-visible) {
+  outline: 2px solid var(--plaster);
+  outline-offset: 2px;
+}
+
+.stepper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--room);
+  border-radius: var(--radius-sm);
+}
+
+.stepper .icon-btn {
+  width: 26px;
+  height: 24px;
+}
+
+.stepper .drawer-value {
+  min-width: 18px;
+  text-align: center;
+}
+
+.label-with-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.info-button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--shade);
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.info-button:hover,
+.info-button[aria-expanded='true'] {
+  color: var(--plaster);
+}
+
+.drawer-help {
+  margin-top: -6px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--dusk);
+}
+
+.drawer-help[hidden] {
+  display: none;
+}
+
+/* ---------- Drawer: content block ----------
+   The preview row is one button; it opens .content-menu (upload / library
+   / remove) so those actions don't take up permanent space. */
+.content-controls {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.content-current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  /* Bleed the hover background slightly past the drawer's content edge. */
+  margin: 0 -6px;
+  width: calc(100% + 12px);
+  padding: 5px 10px 5px 6px;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color 0.12s var(--ease);
+}
+
+.content-current:hover,
+.content-current.open {
+  background: var(--wall-raised);
+}
+
+.content-current .content-meta {
+  flex: 1;
+}
+
+.content-current .chevron {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  margin-bottom: 3px;
+  border-right: 1.5px solid var(--shade);
+  border-bottom: 1.5px solid var(--shade);
+  transform: rotate(45deg);
+  transition: transform 0.15s var(--ease);
+}
+
+.content-current.open .chevron {
+  margin-bottom: -3px;
+  transform: rotate(-135deg);
+}
+
+.content-thumb {
+  position: relative;
+  width: 64px;
+  height: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dusk);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--surface-color) 18%, transparent) 0 2px,
+      transparent 2px 7px
+    ),
+    var(--room);
+}
+
+.content-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.content-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.content-name {
+  font-size: var(--text-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content-name.missing {
+  color: var(--alert);
+}
+
+.content-sub {
+  font-size: var(--text-xs);
+  color: var(--dusk);
+}
+
+.content-sub.warn {
+  color: var(--alert);
+}
+
+.playback-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.playback-controls .icon-btn {
+  width: 26px;
+  height: 26px;
+}
+
+/* "Change" hint over the thumbnail on hover, so the image reads as clickable. */
+.content-current:hover .content-thumb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.content-thumb-busy {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--room) 60%, transparent);
+  animation: content-busy 1s ease-in-out infinite alternate;
+}
+
+@keyframes content-busy {
+  to {
+    opacity: 0.3;
+  }
+}
+
+.content-menu {
+  position: absolute;
+  top: 54px;
+  left: -6px;
+  right: -6px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--wall-raised);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 0 0 1px var(--seam),
+    0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: content-menu-in 0.12s var(--ease);
+}
+
+@keyframes content-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.content-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 30px;
+  padding: 0 9px;
+  font-size: var(--text-sm);
+  text-align: left;
+  color: var(--plaster);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.content-menu button svg {
+  color: var(--dusk);
+}
+
+.content-menu button:hover:not(:disabled),
+.content-menu button:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--wall-raised) 70%, var(--plaster) 12%);
+}
+
+.content-menu button.danger,
+.content-menu button.danger svg {
+  color: var(--alert);
+}
+
+.content-menu button:disabled,
+.content-menu button:disabled svg {
+  color: var(--shade);
+  cursor: default;
+}

@@ -13,3 +13,14 @@ win:
   target: nsis
 linux:
   target: AppImage
+
+# Packaged-build hardening (Electron fuses, flipped in the binary itself):
+# no running the app as plain Node, no NODE_OPTIONS / --inspect injection,
+# and the app only loads from its own integrity-checked app.asar.
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true

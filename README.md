@@ -1,9 +1,11 @@
 # MirrorCat
 
-AI-generated projection mapping content for home use. Describe what you
-want, MirrorCat generates a visual, you drag its four corners to fit the
-real surface it's projected onto, then send it fullscreen to your
-projector.
+Projection mapping for home use. Draw shapes that match the real objects
+in your room (a wall, a cabinet door, a box), put an image or video on
+each one, bend it to fit, and send the result fullscreen to your
+projector. Cat, the built-in assistant, generates content from a prompt.
+
+![MirrorCat editor: the Surfaces panel on the left, the projector frame with a warped video surface in the middle, and the media library on the right](docs/images/mirrorcat-editor.png)
 
 ## Quick start
 
@@ -12,18 +14,123 @@ npm install
 npm run dev
 ```
 
-This opens the control window. Pick the display your projector is
-connected to in the sidebar, click **Send to projector** to open the
-fullscreen output window there, select a surface, type a prompt and hit
-**Generate**, then drag the four corner handles on the canvas until the
-warped rectangle matches your wall/object.
+1. Pick your projector from the display menu in the top bar and click
+   **Go live**. A borderless, fullscreen output window opens on that
+   display.
+2. Select a surface (or **Add surface**) and give it content: drop an
+   image or video onto the library, or describe one to Cat and hit
+   **Generate**.
+3. Drag the corner targets on the stage until the shape lines up with the
+   real object on the wall. Add edge points for anything that isn't a
+   rectangle.
 
-## Architecture
+Everything autosaves; close the app and it comes back as you left it.
 
-See `CLAUDE.md` for the full breakdown of the main/preload/renderer
-split, the control-window vs. output-window model, and the corner-pin
-warp engine. Short version: one Electron app, two windows (one you edit
-in, one that faces the projector), kept in sync over IPC.
+## Features
+
+**Surfaces**
+- Any number of surfaces, each with its own media, outline color,
+  opacity and visibility toggle
+- Four draggable corner pins with large, easy-to-grab targets
+- Edge points for non-rectangular shapes: double-click an edge to add
+  one, select it and press Delete to remove; content bends to follow the
+  shape (Coons-patch warp)
+- Shift-drag a corner to resize in the media's proportions
+- Undo / redo for shape edits (⌘Z / ⇧⌘Z, or Edit ▸ Undo / Redo); a whole
+  drag is one step
+- Layer ordering by drag in the Surfaces panel
+- Rename and delete from each surface's settings drawer
+- Automatic outline colors from a curated palette
+
+**Media**
+- Shared library of images and videos (PNG, JPG, WEBP, GIF, MP4, MOV,
+  WebM), with All / Uploads / Generated filters
+- Drag-and-drop import onto the library or the stage
+- Stretch or Fill fit per surface; Loop or Once playback for video, with
+  replay
+- Placeholder AI generation through a pluggable provider interface
+
+**Projection**
+- Separate control and output windows: edit on the laptop, watch the wall
+- Editor stage locked to the projector's aspect ratio, so shapes match
+  what's projected
+- Live sync to the projector as you edit
+- Autosave of surfaces and calibration; media stored in the app's data
+  folder
+
+## TODO
+
+**Next up**
+- [ ] Preview mode: open the output as a normal window when the chosen
+      display is the laptop screen
+- [ ] Pick a real AI provider (still images vs. video is the open question)
+- [ ] Guard against edge points folding the warp
+
+**Editing**
+- [ ] Undo for settings, media, reorder and surface deletion (shape edits
+      only today)
+- [ ] Arrow-key nudge for corners and edge points
+- [ ] Smooth (curved) edges between edge points
+- [ ] Optional outline on the projector for on-wall calibration
+- [ ] Select a surface by clicking it on the stage
+
+**Media & projects**
+- [ ] Sound for video surfaces
+- [ ] Named save / open and export of a scene with its media
+- [ ] Show library disk usage
+
+**Performance & hardware**
+- [ ] One shared WebGL renderer per window (one context per surface today)
+- [ ] Multiple projectors (one output window per display)
+- [ ] Projector color / gamma calibration
+
+**Before shipping**
+- [ ] Upgrade Electron to 45+ (moderate WebHID/WebUSB advisory; the app
+      doesn't use either)
+- [ ] Code signing + notarization, and a real app icon
+- [ ] Smoke-test a packaged build (`npm run build:mac`) on a clean machine
+
+Details and reasoning for each item are in
+[`docs/roadmap-and-risks.md`](docs/roadmap-and-risks.md).
+
+## Checks and tests
+
+**Before merging, run `npm run verify`.** It runs typecheck, lint, unit
+tests with coverage, the build and the end-to-end tests, then prints a
+summary and the few checks that still need a person (real projector,
+Activity Monitor, a Finder drag). About 20 seconds; a MirrorCat window
+and a small projector window open briefly, against a throwaway data
+folder.
+
+- `npm run verify -- --quick` -- skip the build and e2e (no windows).
+- `npm run verify -- --package` -- also package the app
+  (`electron-builder --dir`, unsigned) and check its Electron fuses.
+- `npm run verify -- --bail` -- stop at the first failure.
+
+The individual steps:
+
+- `npm run check` -- typecheck, lint (warnings fail) and unit tests.
+- `npm run test:coverage` -- unit tests with a coverage report in
+  `coverage/index.html`.
+- `npm run test:e2e` -- builds, then drives the app with Playwright
+  (`e2e/`): projector lifecycle (Esc, Stop, unplug, close-while-live),
+  undo, render-on-demand, delete-in-use, autosave backup and
+  quit-flush, plus security settings. The projector opens as a small
+  window (`MIRRORCAT_OUTPUT_WINDOWED=1`), never fullscreen.
+
+CI runs typecheck, lint, coverage and build on every push
+(`.github/workflows/ci.yml`).
+
+## Documentation
+
+Full docs live in [`docs/`](docs/README.md):
+
+- [Architecture](docs/architecture.md): processes, windows, data flow, IPC
+- [Components](docs/components.md): what each file does
+- [Surfaces & warping](docs/surfaces-and-warping.md): the surface model,
+  edge points, the warp math, undo
+- [Media library & autosave](docs/media-library.md)
+- [Decisions](docs/decisions.md): why things are the way they are
 
 ## Wiring a real AI provider
 
@@ -50,40 +157,5 @@ decision, not just an implementation detail:
   raw key.
 
 Once you've decided, implement `ContentProvider` (`generate(request)` ->
-`GeneratedContent`) and call `setContentProvider(new YourProvider())`.
-
-## Roadmap & known risks
-
-- **No persistence.** Surfaces, generated content, and corner
-  calibration all live in memory and vanish on quit. Next step is a
-  save/load project file (JSON matching `SceneState`) via `dialog` +
-  `fs` in the main process.
-- **No AI provider wired in** (see above) -- currently a local mock.
-- **Display disconnects aren't handled.** If the projector's display is
-  unplugged while `outputWindow` is open, Electron will emit
-  `screen.on('display-removed')`, which nothing currently listens for.
-  The output window should close (or move back to the primary display)
-  when that fires, rather than leaving a dangling window pointed at a
-  display that no longer exists.
-- **Unthrottled scene sync.** `App.tsx` sends the full `SceneState` over
-  IPC on every zustand state change, including every pixel of a
-  corner-drag. Fine at MVP scale (a handful of surfaces, one output
-  window); if surfaces/content grow, this needs throttling or diffing
-  instead of full-state broadcast.
-- **Single output window.** The architecture assumes one projector. A
-  real multi-projector home setup (e.g. wrapping content around a
-  corner) would need multiple concurrent output windows, one per display,
-  each potentially showing a different subset of surfaces.
-- **No color/gamma calibration.** Projector output looks different from
-  a monitor (dimmer, different color response); nothing here compensates
-  for that yet.
-- **Corner dragging is mouse/touch-only.** No keyboard nudge (arrow
-  keys) for fine calibration adjustments, which matters once you're
-  standing across the room from the laptop trying to line things up.
-- **CSP is intentionally omitted** from `src/renderer/index.html` for
-  now (see the TODO comment there) -- add one back before shipping a
-  packaged build.
-- **`sandbox: false`** on both BrowserWindows (set for bundling
-  compatibility with the current preload setup). `contextIsolation` and
-  `nodeIntegration: false` are still on, which covers the main risk, but
-  revisit `sandbox: true` before shipping.
+`GeneratedImage` bytes) and call `setContentProvider(new YourProvider())`.
+The prompt panel saves the result into the media library.

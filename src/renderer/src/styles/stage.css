@@ -1,0 +1,419 @@
+/* ---------- Stage: the dark room the projector frame sits in ---------- */
+.stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 28px 18px;
+  background: var(--room);
+}
+
+/* Size container: the frame below letterboxes itself inside it using
+   container query units, so it's always the projector's exact shape and
+   as large as the pane allows. */
+.stage-frame-area {
+  flex: 1;
+  min-height: 0;
+  container-type: size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The projector frame. Pure black: that's what an unlit projector pixel
+   looks like on the wall. */
+.editor-stage {
+  position: relative;
+  width: min(100cqw, 100cqh * var(--frame-ratio, 1.7778));
+  background: #000;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px var(--seam);
+  transition: box-shadow 0.6s var(--ease);
+}
+
+/* Live: light spills off the frame onto the "wall" around it. This is
+   the one place the room gets brighter, and it only happens when the
+   projector is actually on. */
+.editor-stage.live {
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--bulb) 45%, transparent),
+    0 0 48px -6px color-mix(in srgb, var(--bulb) 28%, transparent),
+    0 0 160px 10px color-mix(in srgb, var(--bulb) 9%, transparent);
+}
+
+.editor-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.editor-layer.selected {
+  pointer-events: auto;
+}
+
+/* Unselected surfaces: outline stays visible but recedes. */
+.projection-canvas.ghost .surface-outline-line {
+  stroke-opacity: 0.5;
+  stroke-dasharray: 6 4;
+}
+
+.projection-canvas.ghost .surface-outline-halo {
+  stroke-opacity: 0.4;
+}
+
+.stage-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  font-size: var(--text-md);
+  color: var(--dusk);
+}
+
+.stage-hint p {
+  margin: 0;
+  max-width: 34ch;
+  line-height: 1.5;
+}
+
+.frame-caption {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--shade);
+}
+
+.frame-live {
+  color: var(--bulb);
+}
+
+/* ---------- Drop overlays (stage + library) ---------- */
+.library-drop-overlay,
+.stage-drop-overlay {
+  position: absolute;
+  inset: 10px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--plaster);
+  background: color-mix(in srgb, var(--room) 82%, transparent);
+  border: 1.5px dashed var(--dusk);
+  border-radius: var(--radius-lg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .library-drop-overlay,
+  .stage-drop-overlay {
+    animation: drop-in 0.12s ease-out;
+  }
+}
+
+@keyframes drop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---------- Projection canvas + editing overlay (shared with the output
+   window) ---------- */
+.projection-canvas {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #000;
+  border: 1px solid var(--seam);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+/* Pin the WebGL canvas to the container's content box. three.js is told
+   not to size it (setSize(..., false)), so without this the canvas is laid
+   out at its backing-store size -- 2x on retina -- and the mesh drifts
+   away from the DOM handles and outline drawn over it. */
+.projection-canvas canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* Explicit layering: canvas (0) < outline + edge hit-strips (1) <
+     handles (2). The canvas never takes input itself. */
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ---------- Editor overlay: outline + corner targets ---------- */
+.surface-outline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.surface-outline-tint {
+  fill: var(--surface-color);
+  fill-opacity: 0.06;
+  stroke: none;
+}
+
+/* Surfaces with no content yet get a clearly lighter, surface-colored fill
+   so the shape stands apart from the black projector frame. Kept faint once
+   content exists so it doesn't wash out the generated image. */
+.projection-canvas.empty .surface-outline-tint {
+  fill-opacity: 0.22;
+}
+
+.projection-canvas.empty.ghost .surface-outline-tint {
+  fill-opacity: 0.12;
+}
+
+/* Dark halo under the colored line keeps the edge readable over bright
+   generated content as well as over the black canvas. */
+.surface-outline-halo {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 4px;
+  stroke-linejoin: miter;
+}
+
+.surface-outline-line {
+  fill: none;
+  stroke: var(--surface-color);
+  stroke-width: 2px;
+  stroke-linejoin: miter;
+}
+
+/* 36px invisible hit area, centered exactly on the corner point. The
+   visible target (ring + dot) is smaller; the generous hit area is what
+   makes it easy to grab. */
+.corner-handle {
+  position: absolute;
+  width: 36px;
+  height: 36px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none;
+  z-index: 2;
+}
+
+.corner-handle:active {
+  cursor: grabbing;
+}
+
+.corner-ring,
+.corner-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.corner-ring {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--surface-color);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.7),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7);
+  transition:
+    width 0.12s ease,
+    height 0.12s ease,
+    background-color 0.12s ease;
+}
+
+.corner-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--surface-color);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
+}
+
+/* Invisible, wide hit strip along each outline segment -- double-click to
+   insert an edge node. */
+.edge-hit {
+  stroke: transparent;
+  stroke-width: 14px;
+  pointer-events: stroke;
+  cursor: copy;
+}
+
+/* Edge nodes: diamonds, smaller than the round corner targets, so the four
+   warp corners stay visually primary. Focus = selected (Delete removes). */
+.edge-node-handle {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+  z-index: 2;
+}
+
+.edge-node-handle:active {
+  cursor: grabbing;
+}
+
+.edge-node-ring,
+.edge-node-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+  pointer-events: none;
+}
+
+.edge-node-ring {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--surface-color);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.7),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.7);
+  transition:
+    width 0.12s ease,
+    height 0.12s ease,
+    background-color 0.12s ease;
+}
+
+.edge-node-dot {
+  width: 4px;
+  height: 4px;
+  background: var(--surface-color);
+}
+
+.edge-node-handle:hover .edge-node-ring {
+  width: 16px;
+  height: 16px;
+}
+
+.edge-node-handle:focus .edge-node-ring {
+  width: 16px;
+  height: 16px;
+  background: color-mix(in srgb, var(--surface-color) 35%, transparent);
+}
+
+.edge-node-handle:focus-visible .edge-node-ring {
+  outline: 2px solid var(--plaster);
+  outline-offset: 3px;
+}
+
+/* Shift-drag readout: a small lock + ratio pill tucked outside the dragged
+   corner (the modifier class says which side is "outside"). */
+.ratio-lock {
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--room);
+  background: var(--surface-color);
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+
+.ratio-lock-0 {
+  transform: translate(calc(-100% - 14px), calc(-100% - 14px));
+}
+
+.ratio-lock-1 {
+  transform: translate(14px, calc(-100% - 14px));
+}
+
+.ratio-lock-2 {
+  transform: translate(14px, 14px);
+}
+
+.ratio-lock-3 {
+  transform: translate(calc(-100% - 14px), 14px);
+}
+
+/* The selected surface's handles, drawn above every layer (its content
+   stays in its real stacking slot underneath). */
+.editor-layer.handles-layer {
+  overflow: visible;
+}
+
+.editor-layer.handles-layer .projection-canvas {
+  background: transparent;
+  /* Lets the ratio pill and corner rings show past the frame edge. */
+  overflow: visible;
+}
+
+.corner-handle:hover .corner-ring {
+  width: 28px;
+  height: 28px;
+}
+
+.corner-handle:active .corner-ring {
+  width: 28px;
+  height: 28px;
+  background: color-mix(in srgb, var(--surface-color) 20%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .corner-ring {
+    transition: none;
+  }
+}
+
+.empty-state {
+  color: var(--dusk);
+  margin: auto;
+}
+
+.output-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  background: #000;
+  overflow: hidden;
+}
+
+.output-layer {
+  position: absolute;
+  inset: 0;
+}
+
+/* Layers are transparent so stacked surfaces all show through; the stage
+   behind them supplies the black. (Each layer used to paint its own black
+   background, which hid every surface but the top one on the projector.) */
+.output-layer .projection-canvas,
+.editor-layer .projection-canvas {
+  position: absolute;
+  inset: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  height: 100%;
+}
