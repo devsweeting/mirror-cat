@@ -373,3 +373,27 @@ An editor-only grid (rejected: projecting it is the useful part).
 at the true center, straight lines stay straight, parallelogram = bilinear,
 non-convex fallback, adding a node moves nothing) and `e2e/grid.spec.ts`
 (shader compiles in the built app, drawer toggles, fallback note).
+
+## 023 Settings › AI & animation: bring-your-own keys, encrypted in main
+*2026-10-28 · Accepted*
+
+**Decision.** A Settings modal (gear in the top bar, ⌘,) with an AI &
+animation section: Luma and fal.ai keys, plus animation defaults (model,
+loop length, quality, a "ask before spending more than" amount). Keys are
+checked with a free request, encrypted with safeStorage in main, and never
+sent back to the renderer -- it only sees last four + checked/unchecked.
+Long form: `docs/ai-settings.md`.
+
+**Why.** Phase 2 starts with early adopters bringing their own keys
+(Devin's call), so the key has to be easy to add and hard to leak. Main-
+only storage keeps it out of the sandboxed page entirely; the free check
+catches copy-paste mistakes before the first paid animation.
+
+**Considered.** A separate Settings window (more IPC and window
+management for no gain yet); a connect prompt in the composer when you
+first press Animate (designed, deferred until Animate exists); storing
+keys when encryption is unavailable (refused).
+
+**Verified by** `shared/ai.test.ts`, `main/ai/keyStore.test.ts`,
+`main/ai/keyCheck.test.ts` and `e2e/settings.spec.ts` (save, reject,
+offline, defaults persisted, key never visible to the page or on disk).

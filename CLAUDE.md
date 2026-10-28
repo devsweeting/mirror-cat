@@ -75,6 +75,11 @@ TypeScript + React + Three.js:
     (older saves). Perspective falls back to bilinear while the corners
     aren't convex. `Surface.showGrid` draws a UV-space alignment grid
     (shader in `ProjectionEngine.ts`) on the editor *and* the projector.
+  - Settings › AI & animation (`components/settings/`, `main/ai/`,
+    `shared/ai.ts`; docs/ai-settings.md): provider keys checked with a free
+    request, encrypted with safeStorage in main, never returned to the
+    renderer (statuses only). Dev hooks: MIRRORCAT_AI_FAKE_CRYPTO=1,
+    MIRRORCAT_AI_KEYCHECK=accept|reject|offline.
   - `ai/contentService.ts` -- `ContentProvider` interface + a
     `MockPatternProvider` placeholder (procedural canvas gradient, no
     network call). Swap in a real generative backend by implementing
