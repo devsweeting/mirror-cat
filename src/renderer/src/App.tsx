@@ -5,7 +5,8 @@ import CatEyes from './components/CatEyes'
 import ProjectorControl from './components/ProjectorControl'
 import PromptPanel from './components/PromptPanel'
 import LibraryPanel from './components/LibraryPanel'
-import { LibraryIcon } from './components/icons'
+import { LibraryIcon, SettingsIcon } from './components/icons'
+import SettingsPanel from './components/settings/SettingsPanel'
 import { useSceneStore } from './state/sceneStore'
 import {
   connectMediaLibrary,
@@ -28,6 +29,11 @@ export default function App() {
   const addSurface = useSceneStore((s) => s.addSurface)
   const libraryOpen = useUiStore((s) => s.libraryOpen)
   const toggleLibrary = useUiStore((s) => s.toggleLibrary)
+  const settingsOpen = useUiStore((s) => s.settingsOpen)
+  const setSettingsOpen = useUiStore((s) => s.setSettingsOpen)
+
+  // App menu ▸ Settings (⌘,).
+  useEffect(() => window.mirrorcat.onOpenSettings(() => setSettingsOpen(true)), [setSettingsOpen])
   const assets = useMediaStore((s) => s.assets)
   const assetCount = assets.length
   const outputDisplayId = useSceneStore((s) => s.outputDisplayId)
@@ -175,6 +181,15 @@ export default function App() {
           Library
           {assetCount > 0 && <span className="topbar-count num">{assetCount}</span>}
         </button>
+        <button
+          type="button"
+          className="icon-btn topbar-settings"
+          onClick={() => setSettingsOpen(true)}
+          aria-label="Settings"
+          title="Settings (⌘,)"
+        >
+          <SettingsIcon />
+        </button>
         <ProjectorControl
           displays={displays}
           selectedDisplayId={selectedDisplayId}
@@ -266,6 +281,7 @@ export default function App() {
         </main>
         {libraryOpen && <LibraryPanel targetSurfaceId={effectiveSurfaceId} />}
       </div>
+      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>
   )
 }

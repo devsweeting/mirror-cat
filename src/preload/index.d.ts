@@ -5,6 +5,13 @@ import type {
   MediaImportResult,
   MediaProbeResult
 } from '../shared/media'
+import type {
+  AiProviderId,
+  AiProviderStatus,
+  AiState,
+  AnimationSettings,
+  SetKeyResult
+} from '../shared/ai'
 
 export interface MirrorCatMediaApi {
   list(): Promise<MediaAsset[]>
@@ -18,6 +25,14 @@ export interface MirrorCatMediaApi {
   onChanged(callback: (assets: MediaAsset[]) => void): () => void
 }
 
+export interface MirrorCatAiApi {
+  getState(): Promise<AiState>
+  /** Checks the key with the provider, then stores it encrypted in main. */
+  setKey(id: AiProviderId, key: string): Promise<SetKeyResult>
+  removeKey(id: AiProviderId): Promise<AiProviderStatus>
+  updateSettings(patch: Partial<AnimationSettings>): Promise<AnimationSettings>
+}
+
 export interface MirrorCatApi {
   getDisplays(): Promise<DisplayInfo[]>
   onDisplaysChanged(callback: (displays: DisplayInfo[]) => void): () => void
@@ -29,7 +44,9 @@ export interface MirrorCatApi {
   requestSceneSync(): Promise<SceneState | null>
   loadSavedScene(): Promise<Surface[] | null>
   onEditCommand(callback: (command: EditCommand) => void): () => void
+  onOpenSettings(callback: () => void): () => void
   media: MirrorCatMediaApi
+  ai: MirrorCatAiApi
 }
 
 declare global {

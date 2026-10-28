@@ -20,9 +20,13 @@ export interface Launched {
 /**
  * Launch the built app (out/) against a throwaway data folder, with the
  * projector opening as a small window instead of fullscreen. Pass `scene`
- * to start from a saved scene.json.
+ * to start from a saved scene.json, and `env` for extra variables (e.g.
+ * the MIRRORCAT_AI_* test hooks).
  */
-export async function launchApp({ scene }: { scene?: unknown } = {}): Promise<Launched> {
+export async function launchApp({
+  scene,
+  env
+}: { scene?: unknown; env?: Record<string, string> } = {}): Promise<Launched> {
   const userData = await mkdtemp(join(tmpdir(), 'mirrorcat-e2e-'))
   if (scene) await writeFile(join(userData, 'scene.json'), JSON.stringify(scene))
 
@@ -32,7 +36,8 @@ export async function launchApp({ scene }: { scene?: unknown } = {}): Promise<La
       ...process.env,
       MIRRORCAT_USER_DATA: userData,
       MIRRORCAT_OUTPUT_WINDOWED: '1',
-      NODE_ENV: 'production'
+      NODE_ENV: 'production',
+      ...env
     }
   })
   const page = await app.firstWindow()

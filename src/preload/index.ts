@@ -7,6 +7,13 @@ import type {
   MediaImportResult,
   MediaProbeResult
 } from '../shared/media'
+import type {
+  AiProviderId,
+  AiProviderStatus,
+  AiState,
+  AnimationSettings,
+  SetKeyResult
+} from '../shared/ai'
 
 const media = {
   list: (): Promise<MediaAsset[]> => ipcRenderer.invoke(IpcChannels.MediaList),
@@ -45,6 +52,20 @@ const media = {
     ipcRenderer.on(IpcChannels.MediaChanged, listener)
     return () => ipcRenderer.removeListener(IpcChannels.MediaChanged, listener)
   }
+}
+
+/**
+ * Settings › AI & animation. A key goes in through setKey and never comes
+ * back out: every reply is a status (last four characters, checked or not).
+ */
+const ai = {
+  getState: (): Promise<AiState> => ipcRenderer.invoke(IpcChannels.AiGetState),
+  setKey: (id: AiProviderId, key: string): Promise<SetKeyResult> =>
+    ipcRenderer.invoke(IpcChannels.AiSetKey, id, key),
+  removeKey: (id: AiProviderId): Promise<AiProviderStatus> =>
+    ipcRenderer.invoke(IpcChannels.AiRemoveKey, id),
+  updateSettings: (patch: Partial<AnimationSettings>): Promise<AnimationSettings> =>
+    ipcRenderer.invoke(IpcChannels.AiUpdateSettings, patch)
 }
 
 const api = {
@@ -93,7 +114,15 @@ const api = {
     return () => ipcRenderer.removeListener(IpcChannels.EditCommand, listener)
   },
 
-  media
+  /** App menu ▸ Settings (⌘,). */
+  onOpenSettings: (callback: () => void): (() => void) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(IpcChannels.SettingsOpen, listener)
+    return () => ipcRenderer.removeListener(IpcChannels.SettingsOpen, listener)
+  },
+
+  media,
+  ai
 }
 
 // Both windows run with contextIsolation and sandbox on, so the API only

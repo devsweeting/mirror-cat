@@ -1,4 +1,4 @@
-import { Menu, type MenuItemConstructorOptions } from 'electron'
+import { app, Menu, type MenuItemConstructorOptions } from 'electron'
 import { IpcChannels } from '../shared/ipcChannels'
 import type { EditCommand } from '../shared/types'
 import { getControlWindow } from './windows/controlWindow'
@@ -19,6 +19,41 @@ export function installAppMenu(): void {
   }
 
   const isMac = process.platform === 'darwin'
+
+  // Always opens in the editor (it lives there), even from the projector.
+  const settingsItem: MenuItemConstructorOptions = {
+    label: isMac ? 'Settings…' : 'Settings',
+    accelerator: 'CmdOrCtrl+,',
+    click: () => {
+      const win = getControlWindow()
+      if (!win) return
+      if (win.isMinimized()) win.restore()
+      win.focus()
+      win.webContents.send(IpcChannels.SettingsOpen)
+    }
+  }
+
+  // The stock macOS app menu has no Settings item, so it's spelled out.
+  const macAppMenu: MenuItemConstructorOptions = {
+    label: app.name,
+    submenu: [
+      { role: 'about' },
+      { type: 'separator' },
+      settingsItem,
+      { type: 'separator' },
+      { role: 'services' },
+      { type: 'separator' },
+      { role: 'hide' },
+      { role: 'hideOthers' },
+      { role: 'unhide' },
+      { type: 'separator' },
+      { role: 'quit' }
+    ]
+  }
+
+  const fileMenu: MenuItemConstructorOptions = isMac
+    ? { role: 'fileMenu' }
+    : { label: 'File', submenu: [settingsItem, { type: 'separator' }, { role: 'quit' }] }
 
   const editMenu: MenuItemConstructorOptions = {
     label: 'Edit',
@@ -50,8 +85,8 @@ export function installAppMenu(): void {
   }
 
   const template: MenuItemConstructorOptions[] = [
-    ...(isMac ? [{ role: 'appMenu' } satisfies MenuItemConstructorOptions] : []),
-    { role: 'fileMenu' },
+    ...(isMac ? [macAppMenu] : []),
+    fileMenu,
     editMenu,
     { role: 'viewMenu' },
     { role: 'windowMenu' }

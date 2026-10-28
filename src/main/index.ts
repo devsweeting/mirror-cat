@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, net } from 'electron'
 import { join } from 'path'
 import { createControlWindow, getControlWindow } from './windows/controlWindow'
 import { closeOutputWindow } from './windows/outputWindow'
@@ -8,6 +8,11 @@ import { watchDisplays } from './displays'
 import { MediaLibrary } from './media/mediaLibrary'
 import { registerMediaProtocol, registerMediaSchemePrivileges } from './media/protocol'
 import { SceneAutosave } from './persistence/sceneAutosave'
+import { KeyStore, type Encryptor } from './ai/keyStore'
+import { electronEncryptor } from './ai/electronEncryptor'
+import { AiSettingsStore } from './ai/aiSettingsStore'
+import type { FetchLike } from './ai/keyCheck'
+import { registerAiHandlers } from './ipc/aiHandlers'
 
 // Point the library + autosave at a scratch folder for tests and demos
 // without touching your real data: MIRRORCAT_USER_DATA=/tmp/x npm run dev
@@ -31,8 +36,19 @@ app.whenReady().then(async () => {
   autosave = new SceneAutosave(join(userData, 'scene.json'))
   const savedSurfaces = await autosave.load()
 
+  const devAi = devAiOverrides()
+  const keys = new KeyStore(join(userData, 'ai-keys.json'), devAi.encryptor ?? electronEncryptor())
+  await keys.load()
+  const aiSettings = new AiSettingsStore(join(userData, 'ai-settings.json'))
+  await aiSettings.load()
+
   // Handlers before the window, so the renderer's first invoke can't race them.
   registerIpcHandlers({ library, autosave, savedSurfaces })
+  registerAiHandlers({
+    keys,
+    settings: aiSettings,
+    fetchImpl: devAi.fetchImpl ?? ((url, init) => net.fetch(url, init))
+  })
   installAppMenu()
   watchDisplays()
   createControlWindow()
@@ -60,3 +76,30 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+
+/**
+ * Test hooks for Settings › AI, development builds only (a packaged app
+ * ignores them), so e2e runs never touch the real Keychain or network:
+ *
+ * - MIRRORCAT_AI_FAKE_CRYPTO=1: keys "encrypted" with a reversible stand-in.
+ * - MIRRORCAT_AI_KEYCHECK=accept|reject|offline: canned key-check answers.
+ */
+function devAiOverrides(): { encryptor?: Encryptor; fetchImpl?: FetchLike } {
+  if (app.isPackaged) return {}
+  const out: { encryptor?: Encryptor; fetchImpl?: FetchLike } = {}
+  if (process.env.MIRRORCAT_AI_FAKE_CRYPTO === '1') {
+    out.encryptor = {
+      isAvailable: () => true,
+      encrypt: (plain) => Buffer.from(plain, 'utf8').reverse(),
+      decrypt: (data) => Buffer.from(data).reverse().toString('utf8')
+    }
+  }
+  const check = process.env.MIRRORCAT_AI_KEYCHECK
+  if (check === 'accept' || check === 'reject' || check === 'offline') {
+    out.fetchImpl = async () => {
+      if (check === 'offline') throw new Error('offline')
+      return { status: check === 'accept' ? 404 : 401 }
+    }
+  }
+  return out
+}

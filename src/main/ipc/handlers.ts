@@ -1,11 +1,4 @@
-import {
-  BrowserWindow,
-  dialog,
-  ipcMain,
-  screen,
-  type IpcMainEvent,
-  type IpcMainInvokeEvent
-} from 'electron'
+import { BrowserWindow, dialog, ipcMain, screen } from 'electron'
 import { isAbsolute } from 'path'
 import { IpcChannels } from '../../shared/ipcChannels'
 import type { SceneState, Surface } from '../../shared/types'
@@ -23,30 +16,11 @@ import { getControlWindow } from '../windows/controlWindow'
 import type { MediaLibrary } from '../media/mediaLibrary'
 import type { SceneAutosave } from '../persistence/sceneAutosave'
 import { normalizeScene } from './sceneValidation'
+import { fromControlWindow, requireControlWindow } from './trust'
 
 /** Upper bound on one drag-and-drop batch, so a stray folder drop can't stall main. */
 const MAX_IMPORT_BATCH = 100
 const MAX_PROMPT_LENGTH = 4000
-
-/**
- * Whether a message came from the editor's own top-level page. Anything
- * that changes the scene, the library or the projector must: the
- * projector window shares the same preload API but has no business
- * editing, and nothing else (a future iframe, a navigated page) should
- * either. Read-only queries are allowed from both windows.
- */
-function fromControlWindow(event: IpcMainEvent | IpcMainInvokeEvent): boolean {
-  const control = getControlWindow()
-  return (
-    !!control &&
-    event.sender === control.webContents &&
-    event.senderFrame === event.sender.mainFrame
-  )
-}
-
-function requireControlWindow(event: IpcMainInvokeEvent): void {
-  if (!fromControlWindow(event)) throw new Error('Not allowed from this window')
-}
 
 interface HandlerDeps {
   library: MediaLibrary

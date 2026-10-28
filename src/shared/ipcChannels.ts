@@ -22,5 +22,12 @@ export const IpcChannels = {
   /** Renderer → main: size, duration, playability and thumbnail it measured. */
   MediaAttachProbe: 'media:attach-probe',
   /** Broadcast to every window with the full asset list whenever it changes. */
-  MediaChanged: 'media:changed'
+  MediaChanged: 'media:changed',
+
+  /** Main → control window: open Settings (app menu, ⌘,). */
+  SettingsOpen: 'settings:open',
+  AiGetState: 'ai:get-state',
+  AiSetKey: 'ai:set-key',
+  AiRemoveKey: 'ai:remove-key',
+  AiUpdateSettings: 'ai:update-settings'
 } as const
