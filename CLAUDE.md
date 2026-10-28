@@ -107,7 +107,12 @@ TypeScript + React + Three.js:
 
 - `npm install` -- first-time setup (also downloads Electron's binary,
   which needs a normal internet connection).
-- `npm run dev` -- electron-vite dev server with HMR.
+- `npm run dev` -- electron-vite dev server with HMR. Only the renderer
+  hot-reloads: after changing `src/main/`, `src/preload/` or `src/shared/`
+  code used by main, **restart `npm run dev`** (a stale preload/main means
+  new IPC is missing and new scene fields get dropped by the old
+  validator). Check `ps` for leftover dev sessions -- two running at once
+  share and fight over the same `scene.json`.
 - `npm run build` -- production bundle to `out/`.
 - `npm run typecheck` -- `tsc --noEmit` for both the node (main/preload)
   and web (renderer) TS projects.
