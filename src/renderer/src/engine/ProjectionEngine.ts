@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import type { CornerSet, EdgeNodeSet, SurfaceFit } from '@shared/types'
+import type { CornerSet, EdgeNodeSet, SurfaceFit, WarpMode } from '@shared/types'
 import { writeWarpGrid } from '@shared/surfaceGeometry'
 
 // Subdivisions of the warped mesh. Higher = finer warp; edge nodes closer
@@ -12,6 +12,79 @@ const ROWS = SEGMENTS + 1
 
 const PLACEHOLDER_COLOR = 0x26323d
 
+/** Cells per side of the alignment grid. Even, so there's a center line. */
+const GRID_DIVISIONS = 8
+
+/**
+ * Alignment grid, drawn in the content's own UV space on the same warped
+ * mesh -- so it bends, tilts and foreshortens exactly as the content does.
+ * Lines are sized with screen-space derivatives so they stay a constant
+ * pixel width however the surface is stretched, with a dark halo so they
+ * read over bright content too (on a projector, dark is simply no light).
+ *
+ * Layers (all hairlines, deliberately subtle): lines every
+ * 1/GRID_DIVISIONS, a slightly stronger center cross and border, and faint
+ * diagonals. In perspective mode the diagonals cross at
+ * the surface's true center, which visibly isn't the midpoint of the shape
+ * on screen -- that's the foreshortening at work.
+ */
+const GRID_VERTEX_SHADER = /* glsl */ `
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`
+
+const GRID_FRAGMENT_SHADER = /* glsl */ `
+  uniform float uDivisions;
+  uniform float uPixelRatio;
+  varying vec2 vUv;
+
+  // Coverage of a line of half-width hw (CSS px) at distance d (device px).
+  float cover(float d, float hw) {
+    float w = hw * uPixelRatio;
+    return 1.0 - smoothstep(w - 0.5, w + 0.5, d);
+  }
+
+  // Distance in device px from this fragment to the nearest line of
+  // f(x, y) = 0 and to the nearest multiple of 1 for g.
+  float distTo(float f) { return abs(f) / max(fwidth(f), 1e-6); }
+  float distToGrid(float g) {
+    return abs(fract(g - 0.5) - 0.5) / max(fwidth(g), 1e-6);
+  }
+
+  void main() {
+    vec2 uv = vUv;
+    float minor = min(distToGrid(uv.x * uDivisions), distToGrid(uv.y * uDivisions));
+    float center = min(distTo(uv.x - 0.5), distTo(uv.y - 0.5));
+    float border = min(min(distTo(uv.x), distTo(1.0 - uv.x)), min(distTo(uv.y), distTo(1.0 - uv.y)));
+    float diag = min(distTo(uv.x - uv.y), distTo(uv.x + uv.y - 1.0));
+
+    // Hairlines, kept quiet so the grid reads as a guide over the content
+    // rather than a pattern on top of it. Tune here: half-width (CSS px)
+    // and strength per layer, then the halo's extra width and strength.
+    const float MINOR_W = 0.4;  const float MINOR_A = 0.3;
+    const float DIAG_W = 0.4;   const float DIAG_A = 0.18;
+    const float CENTER_W = 0.6; const float CENTER_A = 0.55;
+    const float BORDER_W = 0.6; const float BORDER_A = 0.5;
+    const float HALO_W = 0.8;   const float HALO_A = 0.35;
+
+    float line = max(
+      max(cover(minor, MINOR_W) * MINOR_A, cover(diag, DIAG_W) * DIAG_A),
+      max(cover(center, CENTER_W) * CENTER_A, cover(border, BORDER_W) * BORDER_A)
+    );
+    float halo = max(
+      max(cover(minor, MINOR_W + HALO_W) * MINOR_A, cover(diag, DIAG_W + HALO_W) * DIAG_A),
+      max(cover(center, CENTER_W + HALO_W) * CENTER_A, cover(border, BORDER_W + HALO_W) * BORDER_A)
+    ) * HALO_A;
+
+    float alpha = line + halo * (1.0 - line);
+    if (alpha < 0.004) discard;
+    gl_FragColor = vec4(vec3(line / alpha), alpha);
+  }
+`
+
 /**
  * Builds the warp mesh: a SEGMENTS×SEGMENTS grid with regular UVs, whose
  * vertex positions come from writeWarpGrid (a Coons patch over the
@@ -21,11 +94,12 @@ const PLACEHOLDER_COLOR = 0x26323d
 function buildWarpedGeometry(
   corners: CornerSet,
   edgeNodes: EdgeNodeSet,
+  warp: WarpMode,
   width: number,
   height: number
 ): THREE.BufferGeometry {
   const positions = new Float32Array(ROWS * ROWS * 3)
-  writeWarpGrid(corners, edgeNodes, SEGMENTS, width, height, positions)
+  writeWarpGrid(corners, edgeNodes, SEGMENTS, width, height, positions, warp)
 
   const uvs: number[] = []
   for (let j = 0; j < ROWS; j++) {
@@ -64,6 +138,9 @@ export class ProjectionEngine {
   private scene: THREE.Scene
   private camera: THREE.OrthographicCamera
   private mesh: THREE.Mesh
+  /** Shares `mesh`'s geometry; hidden unless the grid is switched on. */
+  private gridMesh: THREE.Mesh
+  private warp: WarpMode
   private texture: THREE.Texture | null = null
   private fit: SurfaceFit = 'stretch'
   private width = 0
@@ -86,10 +163,12 @@ export class ProjectionEngine {
   constructor(
     private container: HTMLElement,
     initialCorners: CornerSet,
-    initialEdgeNodes: EdgeNodeSet
+    initialEdgeNodes: EdgeNodeSet,
+    initialWarp: WarpMode = 'bilinear'
   ) {
     this.corners = initialCorners
     this.edgeNodes = initialEdgeNodes
+    this.warp = initialWarp
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -107,13 +186,29 @@ export class ProjectionEngine {
     this.scene = new THREE.Scene()
     this.camera = new THREE.OrthographicCamera(0, 1, 0, 1, -10, 10)
 
-    const geometry = buildWarpedGeometry(this.corners, this.edgeNodes, 1, 1)
+    const geometry = buildWarpedGeometry(this.corners, this.edgeNodes, this.warp, 1, 1)
     // Placeholder fill until real content is generated. Light enough to read
     // as a shape against the pure-black canvas, dark enough not to blast a
     // bright rectangle onto the wall while you're still calibrating.
     const material = new THREE.MeshBasicMaterial({ color: PLACEHOLDER_COLOR, transparent: true })
     this.mesh = new THREE.Mesh(geometry, material)
     this.scene.add(this.mesh)
+
+    const gridMaterial = new THREE.ShaderMaterial({
+      vertexShader: GRID_VERTEX_SHADER,
+      fragmentShader: GRID_FRAGMENT_SHADER,
+      uniforms: {
+        uDivisions: { value: GRID_DIVISIONS },
+        uPixelRatio: { value: this.renderer.getPixelRatio() }
+      },
+      transparent: true,
+      depthTest: false,
+      depthWrite: false
+    })
+    this.gridMesh = new THREE.Mesh(geometry, gridMaterial)
+    this.gridMesh.renderOrder = 1
+    this.gridMesh.visible = false
+    this.scene.add(this.gridMesh)
 
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(container)
@@ -171,10 +266,18 @@ export class ProjectionEngine {
     this.requestRender()
   }
 
-  setShape(corners: CornerSet, edgeNodes: EdgeNodeSet): void {
+  setShape(corners: CornerSet, edgeNodes: EdgeNodeSet, warp: WarpMode = this.warp): void {
     this.corners = corners
     this.edgeNodes = edgeNodes
+    this.warp = warp
     this.rebuildGeometry()
+  }
+
+  /** Show or hide the alignment grid. Independent of content opacity. */
+  setGrid(visible: boolean): void {
+    if (this.gridMesh.visible === visible) return
+    this.gridMesh.visible = visible
+    this.requestRender()
   }
 
   setOpacity(opacity: number): void {
@@ -279,7 +382,8 @@ export class ProjectionEngine {
       SEGMENTS,
       this.width,
       this.height,
-      position.array as Float32Array
+      position.array as Float32Array,
+      this.warp
     )
     position.needsUpdate = true
     // The surface's proportions just changed, so a `fill` crop must too.
@@ -298,6 +402,7 @@ export class ProjectionEngine {
     canvas.removeEventListener('webglcontextrestored', this.handleContextRestored)
     this.mesh.geometry.dispose()
     ;(this.mesh.material as THREE.Material).dispose()
+    ;(this.gridMesh.material as THREE.Material).dispose()
     this.texture?.dispose()
     this.texture = null
     this.renderer.dispose()

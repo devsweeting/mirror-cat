@@ -348,3 +348,28 @@ push.
 **Why Vitest 4, not 5.** npm 10's resolver crashes on Vitest 5's optional
 peer set; Vitest 4 supports Vite 7 and everything used here. Revisit
 with the Vite 8 upgrade.
+
+## 022 Perspective warp and alignment grid
+*2026-10-27 · Accepted*
+
+**Decision.** Surfaces get `warp: 'perspective' | 'bilinear'` and
+`showGrid`. Perspective (a homography of the corners, with edge-node
+offsets blended on top) is the default for new surfaces; scenes saved
+before this load as bilinear so existing calibration doesn't shift. The
+grid is a per-surface toggle drawn in UV space by a shader, and it is
+projected as well as shown in the editor.
+
+**Why.** Devin wanted to see how content behaves on surfaces at an angle.
+A grid on the bilinear warp would bend with the corners but stay evenly
+spaced, which hides the problem: real flat surfaces foreshorten. So the
+grid alone would have been misleading; it ships with the warp that makes
+angled surfaces look right.
+
+**Considered.** Perspective only when a surface has no edge nodes
+(rejected: adding the first node would make the whole surface jump).
+An editor-only grid (rejected: projecting it is the useful part).
+
+**Verified by** `surfaceGeometry.test.ts` (corners exact, diagonals cross
+at the true center, straight lines stay straight, parallelogram = bilinear,
+non-convex fallback, adding a node moves nothing) and `e2e/grid.spec.ts`
+(shader compiles in the built app, drawer toggles, fallback note).

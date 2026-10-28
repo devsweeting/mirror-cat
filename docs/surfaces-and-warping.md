@@ -19,6 +19,8 @@ interface Surface {
   outlineColor: string      // #rrggbb, editor-only
   opacity: number           // 0–1, applies on the projector too
   visible: boolean          // hidden = not drawn in editor OR on projector
+  warp: 'perspective' | 'bilinear'
+  showGrid: boolean         // alignment grid, editor AND projector
 }
 ```
 
@@ -30,6 +32,8 @@ interface Surface {
 | `outlineColor` | **editor only** | Outline, handles, fill tint, sidebar accent. Never projected. |
 | `opacity` | editor and projector | Content opacity. |
 | `visible` | editor and projector | Toggled by the dot in the sidebar. |
+| `warp` | editor and projector | `perspective` for new surfaces; scenes saved before it existed load as `bilinear` so their calibration doesn't shift. |
+| `showGrid` | editor and projector | Projected on purpose: lining it up with the real surface is the point. |
 
 New surfaces come from `createSurface()`:
 - They start **inset 15%** from the frame edges, so the shape reads
@@ -113,6 +117,49 @@ Implementation notes:
 - Folding is not prevented. Dragging a node past its neighbour, or across
   the opposite edge, makes the patch fold over itself. There's no guard
   yet.
+
+## Perspective warp
+
+The bilinear warp spreads content *evenly* between the corners. That's
+wrong for the most common real case, a flat surface at an angle to the
+projector (a wall, a box face, a door): a real plane foreshortens, so
+the far side should get less of the image, and the diagonals should
+cross at the surface's true center, not the shape's midpoint. Bilinear
+also bends straight content lines that aren't parallel to an edge.
+
+`warp: 'perspective'` uses the **homography** H that maps the unit
+square onto the four corners (Heckbert's closed form, `squareToQuad()`).
+Edge nodes still work: each edge's offset from H's straight edge is
+blended in, Coons-style, on top of H instead of on top of the bilinear
+blend:
+
+```
+P(u, v) = H(u, v) + (1−v)·Δtop(u) + v·Δbottom(u) + (1−u)·Δleft(v) + u·Δright(v)
+```
+
+Edges are still straight polylines through their nodes, but content is
+spread along each segment with the same perspective spacing H gives that
+edge (`evalEdge` with the corners' perspective weights).
+
+| Property | Why it matters |
+| --- | --- |
+| No edge nodes → exactly H. | A true perspective view of a flat surface. |
+| Adding a node (stepper or double-click) moves nothing. | The node's `t` is solved from where it lands (`segmentContentParam`), so it pins the content already there. |
+| A parallelogram gives the same result as bilinear. | Nothing to foreshorten. |
+| Non-convex corners (a dart or bow-tie) fall back to bilinear. | No flat surface looks like that; the drawer says so instead of silently changing. |
+
+The 48×48 mesh is interpolated affinely per triangle, which is close
+enough to true perspective at that density (sub-pixel error).
+
+## Alignment grid
+
+`showGrid` overlays a grid drawn by a fragment shader in the content's
+**UV space** on a second mesh that shares the warped geometry, so it
+bends, tilts and foreshortens exactly like the content. Thin lines every
+1/8, a bolder center cross and border, faint diagonals, with a dark halo
+for contrast over bright media. Line widths use `fwidth()` so they stay
+constant in pixels however the surface is stretched. Content opacity
+doesn't affect it.
 
 ## The editor overlay
 

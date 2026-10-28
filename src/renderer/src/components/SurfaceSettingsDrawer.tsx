@@ -1,14 +1,24 @@
 import { useId, useState, type CSSProperties, type KeyboardEvent } from 'react'
-import { SURFACE_PALETTE, type Surface } from '@shared/types'
+import { SURFACE_PALETTE, type Surface, type WarpMode } from '@shared/types'
 import { useSceneStore } from '../state/sceneStore'
 import { editEdgeNodes } from '../state/shapeHistory'
 import {
   MAX_EDGE_NODES,
   addNodeOnLongestSegment,
   countEdgeNodes,
-  removeNewestEdgeNode
+  removeNewestEdgeNode,
+  warpFrame
 } from '@shared/surfaceGeometry'
 import SurfaceContentControls from './SurfaceContentControls'
+
+const WARP_OPTIONS: { value: WarpMode; label: string; title: string }[] = [
+  {
+    value: 'perspective',
+    label: 'Perspective',
+    title: 'A flat surface at an angle: the far side shrinks, straight lines stay straight'
+  },
+  { value: 'bilinear', label: 'Even', title: 'Spread the content evenly between the corners' }
+]
 
 interface SurfaceSettingsDrawerProps {
   surface: Surface
@@ -34,6 +44,11 @@ export default function SurfaceSettingsDrawer({
   const baseId = useId()
   const nodeHelpId = `${baseId}-node-help`
   const [showNodeHelp, setShowNodeHelp] = useState(false)
+  const warpHelpId = `${baseId}-warp-help`
+  const [showWarpHelp, setShowWarpHelp] = useState(false)
+  // Perspective needs a convex shape; say so instead of silently looking "Even".
+  const perspectiveBlocked =
+    surface.warp === 'perspective' && warpFrame(surface.corners, 'perspective').homography === null
   const colorLabelId = `${baseId}-outline`
   const opacityId = `${baseId}-opacity`
   const opacityPct = Math.round(surface.opacity * 100)
@@ -191,6 +206,77 @@ export default function SurfaceSettingsDrawer({
 
       <div className="drawer-row">
         <span className="drawer-label label-with-info">
+          Warp
+          <button
+            type="button"
+            className="info-button"
+            onClick={() => setShowWarpHelp((v) => !v)}
+            aria-expanded={showWarpHelp}
+            aria-controls={warpHelpId}
+            aria-label="About warp modes and the grid"
+            title="About warp modes and the grid"
+          >
+            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+              <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+              <circle cx="8" cy="5" r="0.9" fill="currentColor" />
+              <path d="M8 7.3v4.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+        </span>
+        <div className="segmented" role="radiogroup" aria-label="Warp">
+          {WARP_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="radio"
+              aria-checked={surface.warp === option.value}
+              title={option.title}
+              onClick={() => updateSurfaceSettings(surface.id, { warp: option.value })}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {perspectiveBlocked && (
+        <div className="drawer-help" role="status">
+          These corners don’t make a shape a flat surface could have, so content is spread evenly
+          until they do.
+        </div>
+      )}
+
+      <div className="drawer-row">
+        <span className="drawer-label">Grid</span>
+        <div className="segmented" role="radiogroup" aria-label="Alignment grid">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={!surface.showGrid}
+            onClick={() => updateSurfaceSettings(surface.id, { showGrid: false })}
+          >
+            Off
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={surface.showGrid}
+            title="Show an alignment grid here and on the projector"
+            onClick={() => updateSurfaceSettings(surface.id, { showGrid: true })}
+          >
+            On
+          </button>
+        </div>
+      </div>
+      <div id={warpHelpId} className="drawer-help" hidden={!showWarpHelp}>
+        Perspective is for flat surfaces at an angle to the projector, like a wall or the side of a
+        box: the far side shrinks the way it does in real life, so content looks undistorted. Even
+        spreads content evenly between the corners. The grid bends with the surface and is projected
+        too, so you can line it up with the real thing. Its diagonals cross at the surface’s true
+        center.
+      </div>
+
+      <div className="drawer-row">
+        <span className="drawer-label label-with-info">
           Edge points
           <button
             type="button"
@@ -228,7 +314,10 @@ export default function SurfaceSettingsDrawer({
             className="icon-btn"
             disabled={extraNodes >= MAX_EDGE_NODES}
             onClick={() =>
-              editEdgeNodes(surface.id, addNodeOnLongestSegment(surface.corners, surface.edgeNodes))
+              editEdgeNodes(
+                surface.id,
+                addNodeOnLongestSegment(surface.corners, surface.edgeNodes, 1, surface.warp)
+              )
             }
             aria-label="Add edge point"
           >

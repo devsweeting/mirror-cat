@@ -176,7 +176,11 @@ export function normalizeSurface(value: unknown): Surface | null {
         ? s.outlineColor
         : DEFAULT_OUTLINE_COLOR,
     opacity: typeof s.opacity === 'number' ? Math.min(1, Math.max(0, s.opacity)) : 1,
-    visible: s.visible !== false
+    visible: s.visible !== false,
+    // Scenes saved before warp modes existed were calibrated with the even
+    // (bilinear) warp; keep them looking exactly as they did.
+    warp: s.warp === 'perspective' ? 'perspective' : 'bilinear',
+    showGrid: s.showGrid === true
   }
 }
 

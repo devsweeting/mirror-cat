@@ -144,7 +144,21 @@ describe('normalizeSurface', () => {
       playToken: 0,
       outlineColor: DEFAULT_OUTLINE_COLOR,
       opacity: 1,
-      visible: true
+      visible: true,
+      // Older saves were calibrated with the even warp; they must not shift.
+      warp: 'bilinear',
+      showGrid: false
+    })
+  })
+
+  it('keeps the warp mode and grid toggle', () => {
+    const corners = createSurface('a', 'a').corners
+    expect(
+      normalizeSurface({ id: 'x', corners, warp: 'perspective', showGrid: true })
+    ).toMatchObject({ warp: 'perspective', showGrid: true })
+    expect(normalizeSurface({ id: 'x', corners, warp: 'fisheye', showGrid: 'yes' })).toMatchObject({
+      warp: 'bilinear',
+      showGrid: false
     })
   })
 

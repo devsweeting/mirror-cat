@@ -70,6 +70,11 @@ TypeScript + React + Three.js:
     The mesh is a Coons patch over the four edge polylines; with no nodes
     it is exactly the classic bilinear quad warp. Each node stores a fixed
     content parameter `t` along its edge plus a draggable frame position.
+    `Surface.warp` picks `perspective` (homography of the corners as the
+    base, edge-node offsets blended on top; new surfaces) or `bilinear`
+    (older saves). Perspective falls back to bilinear while the corners
+    aren't convex. `Surface.showGrid` draws a UV-space alignment grid
+    (shader in `ProjectionEngine.ts`) on the editor *and* the projector.
   - `ai/contentService.ts` -- `ContentProvider` interface + a
     `MockPatternProvider` placeholder (procedural canvas gradient, no
     network call). Swap in a real generative backend by implementing

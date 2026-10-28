@@ -48,6 +48,20 @@ export type EdgeNodeSet = [EdgeNode[], EdgeNode[], EdgeNode[], EdgeNode[]]
  */
 export type SurfaceFit = 'stretch' | 'fill'
 
+/**
+ * How the content is spread between a surface's corners.
+ *
+ * `perspective` treats the surface as a flat plane seen at an angle (a
+ * homography): straight lines stay straight and the far side is
+ * foreshortened, so a wall or box face at an angle to the projector looks
+ * undistorted. `bilinear` spreads the content evenly between the corners --
+ * the classic quad warp, and what scenes saved before this option used.
+ * Perspective falls back to bilinear while the four corners don't form a
+ * convex shape (no flat plane could look like that). See
+ * docs/surfaces-and-warping.md.
+ */
+export type WarpMode = 'perspective' | 'bilinear'
+
 export interface Surface {
   id: string
   name: string
@@ -69,10 +83,19 @@ export interface Surface {
   opacity: number
   /** Hidden surfaces aren't drawn in the editor or on the projector. */
   visible: boolean
+  warp: WarpMode
+  /**
+   * Draw an alignment grid over the content, warped with it. Shown on the
+   * projector too -- seeing it on the real wall is the point.
+   */
+  showGrid: boolean
 }
 
 /** The per-surface fields the settings drawer can edit. */
-export type SurfaceSettings = Pick<Surface, 'outlineColor' | 'opacity' | 'visible' | 'fit' | 'loop'>
+export type SurfaceSettings = Pick<
+  Surface,
+  'outlineColor' | 'opacity' | 'visible' | 'fit' | 'loop' | 'warp' | 'showGrid'
+>
 
 /**
  * Outline colors handed out to new surfaces, in order. A soft take on the
@@ -141,7 +164,9 @@ export function createSurface(
     playToken: 0,
     outlineColor,
     opacity: 1,
-    visible: true
+    visible: true,
+    warp: 'perspective',
+    showGrid: false
   }
 }
 

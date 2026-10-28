@@ -17,7 +17,8 @@ import {
   boundaryPoints,
   insertEdgeNode,
   moveEdgeNode,
-  removeEdgeNode
+  removeEdgeNode,
+  segmentContentParam
 } from '@shared/surfaceGeometry'
 import {
   applyEdgeNodeFrames,
@@ -101,7 +102,12 @@ export default function ProjectionCanvas({
 
   useEffect(() => {
     if (!containerRef.current || contentless) return
-    const engine = new ProjectionEngine(containerRef.current, surface.corners, surface.edgeNodes)
+    const engine = new ProjectionEngine(
+      containerRef.current,
+      surface.corners,
+      surface.edgeNodes,
+      surface.warp
+    )
     engineRef.current = engine
     return () => {
       engine.dispose()
@@ -113,8 +119,12 @@ export default function ProjectionCanvas({
   }, [])
 
   useEffect(() => {
-    engineRef.current?.setShape(surface.corners, surface.edgeNodes)
-  }, [surface.corners, surface.edgeNodes])
+    engineRef.current?.setShape(surface.corners, surface.edgeNodes, surface.warp)
+  }, [surface.corners, surface.edgeNodes, surface.warp])
+
+  useEffect(() => {
+    engineRef.current?.setGrid(surface.showGrid)
+  }, [surface.showGrid])
 
   useEffect(() => {
     engineRef.current?.setOpacity(surface.opacity)
@@ -259,13 +269,14 @@ export default function ProjectionCanvas({
         insertEdgeNode(
           surface.edgeNodes,
           a.edge,
-          a.t + (tEnd - a.t) * s,
+          // The slice of content already at that spot, so nothing moves.
+          segmentContentParam(surface.corners, surface.warp, a.edge, a.t, tEnd, s),
           a.x + (b.x - a.x) * s,
           a.y + (b.y - a.y) * s
         )
       )
     },
-    [onEdgeNodesChange, outline, surface.edgeNodes, toLocal]
+    [onEdgeNodesChange, outline, surface.corners, surface.edgeNodes, surface.warp, toLocal]
   )
 
   const handleNodeKeyDown = useCallback(
