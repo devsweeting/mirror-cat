@@ -94,3 +94,54 @@ test('Escape finishes painting', async () => {
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('mask-paint-layer')).toHaveCount(0)
 })
+
+test('an uploaded mask is saved and comes back after a relaunch', async () => {
+  const first = await launchApp({ scene: scene() })
+  let userData = first.userData
+  try {
+    const { page } = first
+    await page.locator('.surface-header', { hasText: 'Box' }).click()
+    const drawer = page.locator('.surface-drawer')
+    // A cut-out PNG: opaque circle on a transparent background.
+    const png = await page.evaluate(async () => {
+      const c = document.createElement('canvas')
+      c.width = 200
+      c.height = 120
+      const ctx = c.getContext('2d')!
+      ctx.fillStyle = '#c33'
+      ctx.beginPath()
+      ctx.arc(100, 60, 50, 0, Math.PI * 2)
+      ctx.fill()
+      const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), 'image/png'))
+      return Array.from(new Uint8Array(await blob.arrayBuffer()))
+    })
+    await drawer.getByLabel('Mask image file').setInputFiles({
+      name: 'cutout.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(png)
+    })
+    await expect(drawer.getByRole('img', { name: 'Current mask' })).toBeVisible()
+    await expect(drawer.getByRole('alert')).toHaveCount(0)
+    await expect.poll(() => savedMask(userData)).not.toBeNull()
+    const saved = (await savedMask(userData))!
+    expect(first.problems).toEqual([])
+
+    // Relaunch on the same data folder: the mask is still there.
+    await first.app.close()
+    const second = await launchApp({ userData })
+    userData = second.userData
+    try {
+      await second.page.locator('.surface-header', { hasText: 'Box' }).click()
+      await expect(
+        second.page.locator('.surface-drawer').getByRole('img', { name: 'Current mask' })
+      ).toBeVisible()
+      expect((await savedMask(userData))!.id).toBe(saved.id)
+      expect(await readdir(join(userData, 'masks'))).toEqual([`${saved.id}.png`])
+      expect(second.problems).toEqual([])
+    } finally {
+      await second.close()
+    }
+  } finally {
+    await first.close()
+  }
+})

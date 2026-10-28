@@ -11,7 +11,7 @@ import { cornersAspect } from '@shared/proportionalResize'
 import { useSceneStore } from '../state/sceneStore'
 import { useMediaStore } from '../state/mediaStore'
 import { endMaskPaint, startMaskPaint, useMaskPaint } from '../state/maskPaint'
-import { imageToMaskPng } from '../masks/maskImage'
+import { imageToMaskPng, saveMaskPng } from '../masks/maskImage'
 
 const MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 
@@ -44,7 +44,7 @@ export default function SurfaceMaskControls({ surface }: SurfaceMaskControlsProp
     setError(null)
     try {
       if (blob.size > MAX_UPLOAD_BYTES) throw new Error('That image is over 50 MB.')
-      const id = await window.mirrorcat.masks.save(await imageToMaskPng(blob))
+      const id = await saveMaskPng(await imageToMaskPng(blob))
       const params = surface.mask ?? DEFAULT_MASK_PARAMS
       setSurfaceMask(surface.id, {
         id,

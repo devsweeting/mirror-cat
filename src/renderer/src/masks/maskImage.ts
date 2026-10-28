@@ -99,6 +99,22 @@ export async function imageToMaskPng(blob: Blob): Promise<Uint8Array> {
   }
 }
 
+/**
+ * Store a mask PNG through main. In `npm run dev`, editing the preload or
+ * main process doesn't hot-reload them -- only the page -- so a new UI can
+ * meet an old bridge. Say that plainly instead of "cannot read properties
+ * of undefined".
+ */
+export function saveMaskPng(png: Uint8Array): Promise<string> {
+  const masks = window.mirrorcat.masks as typeof window.mirrorcat.masks | undefined
+  if (!masks) {
+    return Promise.reject(
+      new Error('MirrorCat needs a restart to finish updating (quit and reopen it), then try again.')
+    )
+  }
+  return masks.save(png)
+}
+
 export async function canvasToPng(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
   if (!blob) throw new Error('Couldn’t encode the mask')

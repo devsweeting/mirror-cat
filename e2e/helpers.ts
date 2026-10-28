@@ -21,13 +21,15 @@ export interface Launched {
  * Launch the built app (out/) against a throwaway data folder, with the
  * projector opening as a small window instead of fullscreen. Pass `scene`
  * to start from a saved scene.json, and `env` for extra variables (e.g.
- * the MIRRORCAT_AI_* test hooks).
+ * the MIRRORCAT_AI_* test hooks). Pass `userData` to relaunch on an
+ * earlier run's data folder (to test what survives a restart).
  */
 export async function launchApp({
   scene,
-  env
-}: { scene?: unknown; env?: Record<string, string> } = {}): Promise<Launched> {
-  const userData = await mkdtemp(join(tmpdir(), 'mirrorcat-e2e-'))
+  env,
+  userData: existing
+}: { scene?: unknown; env?: Record<string, string>; userData?: string } = {}): Promise<Launched> {
+  const userData = existing ?? (await mkdtemp(join(tmpdir(), 'mirrorcat-e2e-')))
   if (scene) await writeFile(join(userData, 'scene.json'), JSON.stringify(scene))
 
   const app = await electron.launch({

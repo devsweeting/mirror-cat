@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { DEFAULT_MASK_PARAMS, MASK_PAINT_EDGE, maskUrl } from '@shared/mask'
 import type { Surface } from '@shared/types'
 import type { WarpPick } from '@shared/warpPick'
-import { canvasToPng, loadImage } from '../masks/maskImage'
+import { canvasToPng, loadImage, saveMaskPng } from '../masks/maskImage'
 import { useSceneStore } from './sceneStore'
 
 /**
@@ -230,7 +230,7 @@ function flushCommit(): void {
   useMaskPaint.setState({ saving: true })
   commits = commits
     .then(async () => {
-      const id = await window.mirrorcat.masks.save(await canvasToPng(source))
+      const id = await saveMaskPng(await canvasToPng(source))
       const scene = useSceneStore.getState()
       const surface = scene.surfaces.find((s) => s.id === surfaceId)
       if (!surface) return
@@ -246,7 +246,10 @@ function flushCommit(): void {
     .catch((error: unknown) => {
       console.error('[masks] save failed', error)
       dirty = true
-      useMaskPaint.setState({ error: 'Couldn’t save the mask. Your strokes are kept; try again.' })
+      const reason = error instanceof Error && /restart/.test(error.message) ? error.message : null
+      useMaskPaint.setState({
+        error: reason ?? 'Couldn’t save the mask. Your strokes are kept; try again.'
+      })
     })
     .finally(() => {
       if (!commitTimer) useMaskPaint.setState({ saving: false })
