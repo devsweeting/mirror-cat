@@ -25,6 +25,11 @@ export interface MirrorCatMediaApi {
   onChanged(callback: (assets: MediaAsset[]) => void): () => void
 }
 
+export interface MirrorCatMasksApi {
+  /** Store a mask PNG (made in the renderer); resolves with its id. */
+  save(png: Uint8Array): Promise<string>
+}
+
 export interface MirrorCatAiApi {
   getState(): Promise<AiState>
   /** Checks the key with the provider, then stores it encrypted in main. */
@@ -46,6 +51,7 @@ export interface MirrorCatApi {
   onEditCommand(callback: (command: EditCommand) => void): () => void
   onOpenSettings(callback: () => void): () => void
   media: MirrorCatMediaApi
+  masks: MirrorCatMasksApi
   ai: MirrorCatAiApi
 }
 

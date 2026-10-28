@@ -397,3 +397,39 @@ keys when encryption is unavailable (refused).
 **Verified by** `shared/ai.test.ts`, `main/ai/keyStore.test.ts`,
 `main/ai/keyCheck.test.ts` and `e2e/settings.spec.ts` (save, reject,
 offline, defaults persisted, key never visible to the page or on disk).
+
+## 024 Surface masks: UV-space images, distance fields, painted on the stage
+*2026-10-28 · Accepted*
+
+**Context.** "Scan an object" (photo → background removed → surface that
+fits the object) needs surfaces that light an arbitrary shape, not just a
+quad. That primitive is useful on its own first.
+
+**Decision.** `Surface.mask = { id, invert, grow, feather } | null`. The
+mask is a grayscale PNG in the surface's content (UV) space, stored
+content-addressed in `userData/masks` (not the media library) and swept on
+launch when unused. The renderer turns it into a signed distance field so
+grow/feather/invert are shader uniforms. A mask mesh multiplies the
+surface's own canvas by the mask. Masks are painted directly on the stage
+(the pointer is mapped through the drawn mesh), uploaded, or taken from
+the surface image's transparency. Long form:
+`docs/surfaces-and-warping.md` → "Masks".
+
+**Why.** UV space means the mask follows the surface when corners are
+nudged, which is what calibration needs. Distance fields make the sliders
+instant and the edge antialiased at any size. Painting on the stage means
+you can paint while watching the wall.
+
+**Considered.** A polygon outline instead of an image (precise, but bad at
+organic shapes and what segmentation produces is a bitmap anyway); a mask
+in projector space (wouldn't follow corner edits); masks as library assets
+(floods the Library while painting); patching `MeshBasicMaterial` via
+`onBeforeCompile` (fragile across Three.js versions); grow/feather by
+re-blurring the image on the CPU (slow per slider move); a separate flat
+mask editor (loses "paint while you watch the wall").
+
+**Verified by** `shared/mask.test.ts`, `shared/warpPick.test.ts`,
+`main/masks/maskStore.test.ts`, the mask cases in
+`main/persistence/sceneAutosave.test.ts`, and `e2e/mask.spec.ts` (paint,
+save, invert/feather, remove, Esc).
+

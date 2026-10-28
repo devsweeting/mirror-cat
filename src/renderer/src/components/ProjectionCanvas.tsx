@@ -13,6 +13,9 @@ import { ProjectionEngine } from '../engine/ProjectionEngine'
 import type { EdgeNodeSet, Surface } from '@shared/types'
 import type { MediaKind } from '@shared/media'
 import { useSurfaceMedia } from '../hooks/useSurfaceMedia'
+import { useSurfaceMask } from '../hooks/useSurfaceMask'
+import { useMaskPaint } from '../state/maskPaint'
+import MaskPaintLayer from './MaskPaintLayer'
 import {
   boundaryPoints,
   insertEdgeNode,
@@ -142,6 +145,17 @@ export default function ProjectionCanvas({
     playToken: surface.playToken,
     enabled: !contentless
   })
+
+  useSurfaceMask(engineRef, {
+    surfaceId: surface.id,
+    mask: surface.mask,
+    enabled: !contentless
+  })
+
+  // While this surface's mask is being painted, its handles step aside for
+  // the brush (the shape can't change mid-paint).
+  const painting = useMaskPaint((s) => editable && s.surfaceId === surface.id)
+  const showHandles = editable && !painting
 
   const mediaAspect = media?.aspect
   const outline = useMemo(
@@ -290,7 +304,7 @@ export default function ProjectionCanvas({
 
   return (
     <div
-      className={`projection-canvas${ghost ? ' ghost' : ''}${mediaUrl ? '' : ' empty'}`}
+      className={`projection-canvas${ghost ? ' ghost' : ''}${mediaUrl ? '' : ' empty'}${painting ? ' painting' : ''}`}
       ref={containerRef}
       style={{ '--surface-color': surface.outlineColor } as CSSProperties}
       onPointerMove={editable ? handlePointerMove : undefined}
@@ -321,7 +335,7 @@ export default function ProjectionCanvas({
           />
           {/* Wide invisible strokes along each segment: double-click target
               for inserting a node. */}
-          {editable &&
+          {showHandles &&
             outline.map((a, index) => {
               const b = outline[(index + 1) % outline.length]
               return (
@@ -339,7 +353,7 @@ export default function ProjectionCanvas({
             })}
         </svg>
       )}
-      {editable &&
+      {showHandles &&
         surface.edgeNodes.map((nodes, edge) =>
           nodes.map((node, i) => (
             <div
@@ -356,7 +370,7 @@ export default function ProjectionCanvas({
             </div>
           ))
         )}
-      {editable &&
+      {showHandles &&
         surface.corners.map((corner, index) => (
           <div
             key={index}
@@ -370,7 +384,8 @@ export default function ProjectionCanvas({
             <span className="corner-dot" />
           </div>
         ))}
-      {editable && lockHint && (
+      {painting && <MaskPaintLayer surface={surface} toLocal={toLocal} />}
+      {showHandles && lockHint && (
         <div
           className={`ratio-lock ratio-lock-${lockHint.index}`}
           style={{

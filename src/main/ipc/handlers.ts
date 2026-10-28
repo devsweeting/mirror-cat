@@ -15,6 +15,7 @@ import { openOutputWindow, closeOutputWindow, getOutputWindow } from '../windows
 import { getControlWindow } from '../windows/controlWindow'
 import type { MediaLibrary } from '../media/mediaLibrary'
 import type { SceneAutosave } from '../persistence/sceneAutosave'
+import type { MaskStore } from '../masks/maskStore'
 import { normalizeScene } from './sceneValidation'
 import { fromControlWindow, requireControlWindow } from './trust'
 
@@ -24,6 +25,7 @@ const MAX_PROMPT_LENGTH = 4000
 
 interface HandlerDeps {
   library: MediaLibrary
+  masks: MaskStore
   autosave: SceneAutosave
   /** Surfaces read from disk at startup, handed to the control window once asked. */
   savedSurfaces: Surface[] | null
@@ -33,7 +35,12 @@ interface HandlerDeps {
 // window whenever it (re)opens so it doesn't start blank.
 let latestScene: SceneState | null = null
 
-export function registerIpcHandlers({ library, autosave, savedSurfaces }: HandlerDeps): void {
+export function registerIpcHandlers({
+  library,
+  masks,
+  autosave,
+  savedSurfaces
+}: HandlerDeps): void {
   ipcMain.handle(IpcChannels.GetDisplays, () => listDisplays())
 
   ipcMain.handle(IpcChannels.OpenOutputWindow, (event, displayId: unknown) => {
@@ -154,6 +161,14 @@ export function registerIpcHandlers({ library, autosave, savedSurfaces }: Handle
     requireControlWindow(event)
     if (typeof id !== 'string' || !ASSET_ID_PATTERN.test(id)) return false
     return library.remove(id)
+  })
+
+  // ---------- Surface masks ----------
+
+  ipcMain.handle(IpcChannels.MaskSave, (event, bytes: unknown) => {
+    requireControlWindow(event)
+    if (!(bytes instanceof Uint8Array)) throw new Error('Expected mask PNG bytes')
+    return masks.save(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength))
   })
 
   library.onChange((assets) => {

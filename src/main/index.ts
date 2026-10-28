@@ -8,6 +8,7 @@ import { watchDisplays } from './displays'
 import { MediaLibrary } from './media/mediaLibrary'
 import { registerMediaProtocol, registerMediaSchemePrivileges } from './media/protocol'
 import { SceneAutosave } from './persistence/sceneAutosave'
+import { MaskStore } from './masks/maskStore'
 import { KeyStore, type Encryptor } from './ai/keyStore'
 import { electronEncryptor } from './ai/electronEncryptor'
 import { AiSettingsStore } from './ai/aiSettingsStore'
@@ -31,10 +32,20 @@ app.whenReady().then(async () => {
 
   const library = new MediaLibrary(join(userData, 'media'))
   await library.init()
-  registerMediaProtocol(library)
+  const masks = new MaskStore(join(userData, 'masks'))
+  await masks.init()
+  registerMediaProtocol(library, masks)
 
   autosave = new SceneAutosave(join(userData, 'scene.json'))
   const savedSurfaces = await autosave.load()
+  // Painting saves a new mask every few strokes; drop the ones no saved
+  // scene (or its backup) still uses. Skipped if scene.json is unreadable.
+  const masksInUse = await autosave.maskIdsInUse()
+  if (masksInUse) {
+    for (const surface of savedSurfaces ?? []) if (surface.mask) masksInUse.add(surface.mask.id)
+    const removed = await masks.sweep(masksInUse).catch(() => 0)
+    if (removed > 0) console.log(`[masks] swept ${removed} unused mask file(s)`)
+  }
 
   const devAi = devAiOverrides()
   const keys = new KeyStore(join(userData, 'ai-keys.json'), devAi.encryptor ?? electronEncryptor())
@@ -43,7 +54,7 @@ app.whenReady().then(async () => {
   await aiSettings.load()
 
   // Handlers before the window, so the renderer's first invoke can't race them.
-  registerIpcHandlers({ library, autosave, savedSurfaces })
+  registerIpcHandlers({ library, masks, autosave, savedSurfaces })
   registerAiHandlers({
     keys,
     settings: aiSettings,

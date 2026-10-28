@@ -24,6 +24,9 @@ export const IpcChannels = {
   /** Broadcast to every window with the full asset list whenever it changes. */
   MediaChanged: 'media:changed',
 
+  /** Control window → main: store a mask PNG, get its id back. */
+  MaskSave: 'mask:save',
+
   /** Main → control window: open Settings (app menu, ⌘,). */
   SettingsOpen: 'settings:open',
   AiGetState: 'ai:get-state',

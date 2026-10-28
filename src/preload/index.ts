@@ -54,6 +54,11 @@ const media = {
   }
 }
 
+/** Surface masks: the renderer makes the PNG, main stores it and returns its id. */
+const masks = {
+  save: (png: Uint8Array): Promise<string> => ipcRenderer.invoke(IpcChannels.MaskSave, png)
+}
+
 /**
  * Settings › AI & animation. A key goes in through setKey and never comes
  * back out: every reply is a status (last four characters, checked or not).
@@ -122,6 +127,7 @@ const api = {
   },
 
   media,
+  masks,
   ai
 }
 

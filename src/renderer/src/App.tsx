@@ -7,6 +7,8 @@ import PromptPanel from './components/PromptPanel'
 import LibraryPanel from './components/LibraryPanel'
 import { LibraryIcon, SettingsIcon } from './components/icons'
 import SettingsPanel from './components/settings/SettingsPanel'
+import MaskPaintToolbar from './components/MaskPaintToolbar'
+import { endMaskPaint, redoPaint, undoPaint, useMaskPaint } from './state/maskPaint'
 import { useSceneStore } from './state/sceneStore'
 import {
   connectMediaLibrary,
@@ -55,6 +57,12 @@ export default function App() {
           (el instanceof HTMLElement && el.isContentEditable)
         if (typing) {
           document.execCommand(command)
+          return
+        }
+        // While painting a mask, undo/redo step brush strokes instead.
+        if (useMaskPaint.getState().surfaceId) {
+          if (command === 'undo') undoPaint()
+          else redoPaint()
           return
         }
         const changed = command === 'undo' ? undoShape() : redoShape()
@@ -159,6 +167,14 @@ export default function App() {
   const layerOrder = useMemo(() => surfaces.filter((s) => s.visible), [surfaces])
 
   const selectedSurface = surfaces.find((s) => s.id === effectiveSurfaceId) ?? null
+
+  // Painting follows the selection: selecting another surface, hiding or
+  // deleting this one finishes (and saves) the session.
+  const paintingSurfaceId = useMaskPaint((s) => s.surfaceId)
+  const paintingSelected = !!paintingSurfaceId && paintingSurfaceId === selectedSurface?.id
+  useEffect(() => {
+    if (paintingSurfaceId && (!paintingSelected || !selectedSurface?.visible)) void endMaskPaint()
+  }, [paintingSurfaceId, paintingSelected, selectedSurface?.visible])
   const live = outputDisplayId !== null
 
   return (
@@ -206,6 +222,9 @@ export default function App() {
                 ? `Drop to put it on ${dropTargetName}`
                 : 'Drop to add to the library'}
             </div>
+          )}
+          {paintingSelected && selectedSurface && (
+            <MaskPaintToolbar surfaceName={selectedSurface.name} />
           )}
           <div className="stage-frame-area">
             <div

@@ -75,6 +75,15 @@ TypeScript + React + Three.js:
     (older saves). Perspective falls back to bilinear while the corners
     aren't convex. `Surface.showGrid` draws a UV-space alignment grid
     (shader in `ProjectionEngine.ts`) on the editor *and* the projector.
+  - Surface masks (`shared/mask.ts`, `shared/warpPick.ts`,
+    `main/masks/maskStore.ts`, `state/maskPaint.ts`,
+    `hooks/useSurfaceMask.ts`; docs/surfaces-and-warping.md → "Masks",
+    decision 024): `Surface.mask` is a grayscale PNG in the surface's UV
+    space in `userData/masks`, served as `mirrorcat-media://mask/<id>`,
+    turned into a signed distance field in the renderer so grow/feather/
+    invert are uniforms. Painted on the stage (pointer mapped through the
+    drawn mesh by `pickWarpGrid`), uploaded, or cut from the surface
+    image's alpha. Unused masks are swept on launch.
   - Settings › AI & animation (`components/settings/`, `main/ai/`,
     `shared/ai.ts`; docs/ai-settings.md): provider keys checked with a free
     request, encrypted with safeStorage in main, never returned to the

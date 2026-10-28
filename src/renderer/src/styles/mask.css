@@ -1,0 +1,111 @@
+/* ---------- Surface masks: drawer section, paint layer, toolbar ---------- */
+
+.mask-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mask-thumb {
+  width: 44px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: #000;
+  outline: 1px solid var(--seam);
+}
+
+.mask-thumb.inverted {
+  filter: invert(1);
+}
+
+.mask-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mask-actions .btn {
+  padding: 4px 10px;
+  font-size: var(--text-sm);
+}
+
+.mask-actions .btn.active {
+  color: var(--plaster);
+  background: var(--wall-raised);
+}
+
+.mask-error {
+  color: var(--alert);
+}
+
+/* Covers the selected surface's whole frame while painting, above its
+   (now hidden) handles. */
+.mask-paint-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: auto;
+  cursor: none;
+  touch-action: none;
+}
+
+/* Brush ring: dark halo plus a light line so it reads on any content.
+   Dashed while hiding, solid while revealing. */
+.mask-brush-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--plaster);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.mask-paint-layer.tool-hide .mask-brush-cursor {
+  border-style: dashed;
+}
+
+/* In the stage's flow above the frame (not floating over it), so it never
+   covers the part of the surface you're painting. */
+.mask-toolbar {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 8px 6px 10px;
+  border-radius: var(--radius-lg);
+  background: var(--wall);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
+}
+
+.mask-toolbar-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dusk);
+  font-size: var(--text-sm);
+}
+
+.mask-toolbar-size .slider {
+  width: 96px;
+}
+
+.mask-toolbar-group {
+  display: flex;
+  gap: 4px;
+}
+
+.mask-toolbar-group .btn {
+  padding: 4px 10px;
+  font-size: var(--text-sm);
+}
+
+.mask-toolbar-status {
+  min-width: 48px;
+  color: var(--dusk);
+  font-size: var(--text-sm);
+}

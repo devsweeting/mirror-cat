@@ -188,3 +188,38 @@ describe('normalizeSurface', () => {
     expect(s?.edgeNodes[1]).toEqual([])
   })
 })
+
+describe('masks in saved scenes', () => {
+  const ID_A = 'a'.repeat(64)
+  const ID_B = 'b'.repeat(64)
+  const masked = (id: string, mask: string) => ({
+    ...createSurface(id, id),
+    mask: { id: mask, invert: false, grow: 0, feather: 0.01 }
+  })
+
+  it('loads scenes saved before masks existed with no mask', () => {
+    const { mask: _drop, ...old } = createSurface('s', 'Old')
+    void _drop
+    expect(normalizeSurface(old)?.mask).toBeNull()
+  })
+
+  it('drops a malformed mask but keeps the surface', () => {
+    const s = normalizeSurface({ ...createSurface('s', 'S'), mask: { id: 'nope' } })
+    expect(s).not.toBeNull()
+    expect(s!.mask).toBeNull()
+  })
+
+  it('lists mask ids from scene.json and its backup', async () => {
+    await fs.writeFile(path, JSON.stringify({ version: 1, surfaces: [masked('s1', ID_A)] }))
+    await fs.writeFile(
+      join(dir, 'scene.prev.json'),
+      JSON.stringify({ version: 1, surfaces: [masked('s2', ID_B)] })
+    )
+    expect(await new SceneAutosave(path).maskIdsInUse()).toEqual(new Set([ID_A, ID_B]))
+  })
+
+  it('refuses to list (so nothing is swept) when scene.json is unreadable', async () => {
+    await fs.writeFile(path, '{ not json')
+    expect(await new SceneAutosave(path).maskIdsInUse()).toBeNull()
+  })
+})

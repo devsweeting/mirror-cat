@@ -161,6 +161,63 @@ for contrast over bright media. Line widths use `fwidth()` so they stay
 constant in pixels however the surface is stretched. Content opacity
 doesn't affect it.
 
+## Masks
+
+`Surface.mask` keeps light off the parts of a surface you don't want lit:
+everything around an object, a window in a wall. It's the first step of
+"scan an object" (photo → background removed → masked surface), and it's
+useful on its own today.
+
+**Model.** A mask is a grayscale PNG in the surface's **content space** (u
+across, v down; white = lit), stored content-addressed in
+`userData/masks/<sha256>.png` by `main/masks/maskStore.ts` and served as
+`mirrorcat-media://mask/<id>`. The surface holds `{ id, invert, grow,
+feather }` (`shared/mask.ts`). Because the mask lives in UV space it moves
+and bends with the surface: nudge a corner after masking and the cut-out
+stays on the object. Masks are kept out of the media library (they aren't
+media you'd reuse, and painting saves a new one every few strokes); files
+no saved scene or backup refers to are swept on launch.
+
+**Rendering.** A third mesh shares the warped geometry, drawn after the
+content and before the grid. Its shader outputs only an alpha `m`, and its
+blend mode (`dst × srcAlpha` for color and alpha) multiplies whatever this
+surface has drawn so far by `m`. Each surface has its own canvas, so
+nothing else is affected, and the content material is untouched. The grid
+stays unmasked, so it still helps you line the whole surface up.
+
+**Grow / feather are free.** When a mask loads, the renderer turns it into
+a **signed distance field** (`encodeSignedDistanceField`, Felzenszwalb's
+linear-time transform, at ≤1024 px), stored as one byte per pixel with the
+edge at 128. The shader decodes the distance (as a fraction of the mask's
+shorter side), flips it for invert, adds grow and smoothsteps over the
+feather width (at least about a pixel, via `fwidth`, so a crisp edge is
+still antialiased). The sliders are uniforms: no recomputation. Fields are
+cached by id.
+
+**Painting.** Paint draws directly on the stage, over the warped surface,
+so you can watch the wall while you paint. The pointer is mapped back into
+content space by `pickWarpGrid` (`shared/warpPick.ts`), which inverts the
+very mesh the engine draws (barycentric lookup over its triangles), so it's
+exact in every warp mode, edge nodes included. Each stamp is drawn as the
+ellipse that the warp turns back into a circle on screen: the canvas
+transform is diag(W, H)·J⁻¹, with J the local stretch from the pick. While
+a session is open, the editor uses the paint canvas itself as the mask
+(a plain black/white image is a valid field in the same encoding), and
+350 ms after each stroke it's saved and set on the surface, which updates
+the projector and the autosave. Undo/redo (⌘Z / ⇧⌘Z) step strokes while
+painting (12 levels). Painting ends with Done, Esc/Enter, selecting another
+surface, or hiding/deleting this one; unsaved strokes are saved first.
+
+**Uploading.** Any PNG/JPEG/WebP becomes a mask in the renderer
+(`imageToMaskPng`): images with transparency use their alpha (cut-outs,
+like a photo with the background removed), opaque ones their brightness.
+"From image" does the same with the surface's own picture.
+
+**Limits.** Grow/feather units follow the mask's shorter side, so on a
+surface stretched far from the mask's proportions they're slightly
+anisotropic. Mask changes aren't in undo history (like warp/grid). The
+projector updates per stroke, not per pointer move.
+
 ## The editor overlay
 
 On top of the WebGL canvas, `ProjectionCanvas` draws the editing UI in the

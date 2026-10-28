@@ -3,6 +3,7 @@ import { createReadStream, promises as fs } from 'fs'
 import { Readable } from 'stream'
 import { ASSET_ID_PATTERN, MEDIA_SCHEME } from '../../shared/media'
 import type { MediaLibrary } from './mediaLibrary'
+import type { MaskStore } from '../masks/maskStore'
 import { parseRange } from './range'
 
 // Renderers load from http://localhost in dev and file:// in production,
@@ -32,20 +33,33 @@ export function registerMediaSchemePrivileges(): void {
 }
 
 /**
- * Serves `mirrorcat-media://asset/<id>` (original) and
+ * Serves `mirrorcat-media://asset/<id>` (original),
  * `mirrorcat-media://thumb/<id>` (thumbnail; for images without one, the
- * original). Only ids present in the library index resolve, so a crafted
- * URL can never read an arbitrary path.
+ * original) and `mirrorcat-media://mask/<id>` (a surface mask PNG). Only
+ * ids present in the library index (or the mask folder) resolve, so a
+ * crafted URL can never read an arbitrary path.
  *
  * Files are streamed, never read whole, and HTTP Range requests are
  * honoured: <video> relies on them to seek, to loop, and to read the index
  * at the end of an MP4 without downloading everything before it.
  */
-export function registerMediaProtocol(library: MediaLibrary): void {
+export function registerMediaProtocol(library: MediaLibrary, masks: MaskStore): void {
   protocol.handle(MEDIA_SCHEME, async (request) => {
     const url = new URL(request.url)
     const id = url.pathname.replace(/^\/+/, '')
     const kind = url.hostname
+    if (kind === 'mask') {
+      if (!(await masks.has(id))) return notFound()
+      return new Response(toWeb(masks.pathFor(id)), {
+        status: 200,
+        headers: {
+          ...CORS_HEADERS,
+          'Content-Type': 'image/png',
+          // Content-addressed: an id's bytes never change.
+          'Cache-Control': 'public, max-age=31536000, immutable'
+        }
+      })
+    }
     const asset = ASSET_ID_PATTERN.test(id) ? library.get(id) : undefined
     if (!asset || (kind !== 'asset' && kind !== 'thumb')) return notFound()
 

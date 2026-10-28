@@ -10,6 +10,7 @@ import {
   warpFrame
 } from '@shared/surfaceGeometry'
 import SurfaceContentControls from './SurfaceContentControls'
+import SurfaceMaskControls from './SurfaceMaskControls'
 
 const WARP_OPTIONS: { value: WarpMode; label: string; title: string }[] = [
   {
@@ -336,6 +337,8 @@ export default function SurfaceSettingsDrawer({
         The four corners pin the image. Edge points bend the edges to fit curved or uneven shapes:
         double-click an edge to add one there, or select one and press Delete to remove it.
       </div>
+
+      <SurfaceMaskControls surface={surface} />
     </div>
   )
 }
