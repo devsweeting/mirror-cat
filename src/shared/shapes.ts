@@ -20,8 +20,10 @@ export interface DetectedShape {
   kind: ShapeKind
   /** Fitted surface corners: top-left, top-right, bottom-right, bottom-left. */
   corners: CornerSet
-  /** The shape's outline, for drawing. */
+  /** The shape's outline, for drawing (the biggest piece when there are several). */
   outline: Point[]
+  /** Every piece's outline, when combined shapes don't touch. */
+  rings?: Point[][]
   /** Share of the frame it covers, 0..1. */
   area: number
 }
@@ -281,12 +283,8 @@ export function frameToSurface(
 export function shapeAt(shapes: readonly DetectedShape[], p: Point): DetectedShape | null {
   let hit: DetectedShape | null = null
   for (const shape of shapes) {
-    if (pointInPolygon(p, shape.outline) && (!hit || shape.area < hit.area)) hit = shape
+    const inside = (shape.rings ?? [shape.outline]).some((ring) => pointInPolygon(p, ring))
+    if (inside && (!hit || shape.area < hit.area)) hit = shape
   }
   return hit
-}
-
-/** The number a shape is shown with (ids are numbered in reading order). */
-export function shapeNumber(shape: Pick<DetectedShape, 'id'>): number {
-  return Number(shape.id.replace(/\D/g, '')) || 0
 }

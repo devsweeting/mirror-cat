@@ -1,40 +1,43 @@
-import { useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import type { FrameBox } from '@shared/sam'
-import { shapeAt, shapeNumber, type DetectedShape } from '@shared/shapes'
+import { shapeAt, type DetectedShape } from '@shared/shapes'
+import Tooltip from './Tooltip'
 
 /** Where a picked shape goes: a new surface, or an existing surface's id. */
 export type ShapeTarget = 'new' | string
 
 interface ShapePickerProps {
   imageUrl: string
+  /** In list order; a shape is shown with its position (1, 2, 3…). */
   shapes: DetectedShape[]
   /** Picked shapes and where each goes; a shape that's not here isn't picked. */
   picks: Record<string, ShapeTarget>
   surfaces: { id: string; name: string }[]
   onToggle: (shapeId: string) => void
   onTarget: (shapeId: string, target: ShapeTarget) => void
-  onPickAll: (all: boolean) => void
   /** A box was drawn around something on the photo. */
   onBox: (box: FrameBox) => void
   /** A box being searched right now (drawn pulsing until it's answered). */
   pendingBox: FrameBox | null
-  /** Shown under the list: the detailed finder. */
+  /** Floats over the bottom of the photo: what to do with the picked shapes. */
+  selectionBar?: ReactNode
+  /** Above the list: counts and pick all / none. */
+  listHead?: ReactNode
+  /** Under the list: the detailed finder. */
   footer?: ReactNode
 }
 
 /** How far (px) a press must move before it's a box rather than a click. */
 const DRAG_PX = 6
+/** A badge's size as a share of the stage's width (about 26 px on a ~560 px stage). */
+const BADGE = 0.047
 
-function centre(shape: DetectedShape): { x: number; y: number } {
-  const pts = shape.outline
+function centre(points: { x: number; y: number }[]): { x: number; y: number } {
   return {
-    x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
-    y: pts.reduce((s, p) => s + p.y, 0) / pts.length
+    x: points.reduce((s, p) => s + p.x, 0) / points.length,
+    y: points.reduce((s, p) => s + p.y, 0) / points.length
   }
 }
-
-/** A badge's size as a share of the stage (about 26 px on a ~560 px stage). */
-const BADGE = 0.047
 
 /**
  * Where each shape's number goes: its centre, unless that's on top of a
@@ -45,7 +48,7 @@ function badgePositions(shapes: DetectedShape[], aspect: number): Map<string, { 
   const placed = new Map<string, { x: number; y: number }>()
   const step = BADGE * aspect
   for (const shape of [...shapes].sort((a, b) => b.area - a.area)) {
-    const p = centre(shape)
+    const p = centre(shape.outline)
     for (let tries = 0; tries < 8; tries++) {
       const clash = [...placed.values()].some((q) => Math.abs(q.x - p.x) < BADGE && Math.abs(q.y - p.y) < step)
       if (!clash) break
@@ -65,12 +68,13 @@ function boxStyle(box: FrameBox): CSSProperties {
   }
 }
 
+const points = (ring: { x: number; y: number }[]): string => ring.map((p) => `${p.x},${p.y}`).join(' ')
+
 /**
  * The fitted scan with every found shape outlined. Click a shape (or its
  * row) to pick it; drag a box around anything that wasn't found, or to say
- * "this one, not the bit inside it". Each picked shape becomes a surface:
- * a new one, or an existing surface moved onto it. The list is the
- * keyboard-friendly way in.
+ * "this one, not the bit inside it". Picked shapes are lit like the
+ * projector's already on them. The list is the keyboard-friendly way in.
  */
 export default function ShapePicker({
   imageUrl,
@@ -79,9 +83,10 @@ export default function ShapePicker({
   surfaces,
   onToggle,
   onTarget,
-  onPickAll,
   onBox,
   pendingBox,
+  selectionBar,
+  listHead,
   footer
 }: ShapePickerProps) {
   const [aspect, setAspect] = useState(16 / 9)
@@ -90,8 +95,22 @@ export default function ShapePicker({
   const press = useRef<{ x: number; y: number; px: number; py: number; moved: boolean } | null>(null)
   // Big shapes underneath, small ones on top, so inner shapes stay clickable.
   const layered = useMemo(() => [...shapes].sort((a, b) => b.area - a.area), [shapes])
-  const pickedCount = shapes.filter((s) => picks[s.id]).length
   const badges = useMemo(() => badgePositions(shapes, aspect), [shapes, aspect])
+  const position = useMemo(() => new Map(shapes.map((s, i) => [s.id, i + 1])), [shapes])
+
+  // Esc while drawing cancels the box (and doesn't close the dialog).
+  useEffect(() => {
+    if (!draft) return
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      press.current = null
+      setDraft(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [draft])
 
   const pointAt = (event: PointerEvent<HTMLDivElement>): { x: number; y: number } => {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -104,8 +123,7 @@ export default function ShapePicker({
   const handleDown = (event: PointerEvent<HTMLDivElement>): void => {
     if (event.button !== 0) return
     event.currentTarget.setPointerCapture?.(event.pointerId)
-    const p = pointAt(event)
-    press.current = { ...p, px: event.clientX, py: event.clientY, moved: false }
+    press.current = { ...pointAt(event), px: event.clientX, py: event.clientY, moved: false }
   }
 
   const handleMove = (event: PointerEvent<HTMLDivElement>): void => {
@@ -145,7 +163,7 @@ export default function ShapePicker({
     <div className="shape-picker">
       <div className="shape-stage-wrap">
         <div
-          className={`shape-stage${hovered ? ' over-shape' : ''}`}
+          className={`shape-stage${hovered ? ' over-shape' : ''}${draft ? ' drawing' : ''}`}
           style={{ aspectRatio: String(aspect) }}
           onPointerDown={handleDown}
           onPointerMove={handleMove}
@@ -168,19 +186,23 @@ export default function ShapePicker({
           />
           <svg viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true">
             {layered.map((shape) => {
-              const points = shape.outline.map((p) => `${p.x},${p.y}`).join(' ')
+              const rings = shape.rings ?? [shape.outline]
               const cls = `shape-outline${picks[shape.id] ? ' picked' : ''}${hovered === shape.id ? ' hovered' : ''}`
               return (
                 <g key={shape.id} className={cls}>
-                  <polygon points={points} className="shape-fill" />
-                  <polygon points={points} className="shape-halo" vectorEffect="non-scaling-stroke" />
-                  <polygon points={points} className="shape-line" vectorEffect="non-scaling-stroke" />
+                  {rings.map((ring, i) => (
+                    <g key={i}>
+                      <polygon points={points(ring)} className="shape-fill" />
+                      <polygon points={points(ring)} className="shape-halo" vectorEffect="non-scaling-stroke" />
+                      <polygon points={points(ring)} className="shape-line" vectorEffect="non-scaling-stroke" />
+                    </g>
+                  ))}
                 </g>
               )
             })}
           </svg>
           {shapes.map((shape) => {
-            const c = badges.get(shape.id) ?? centre(shape)
+            const c = badges.get(shape.id) ?? centre(shape.outline)
             return (
               <span
                 key={shape.id}
@@ -188,54 +210,25 @@ export default function ShapePicker({
                 style={{ left: `${c.x * 100}%`, top: `${c.y * 100}%` }}
                 aria-hidden="true"
               >
-                {shapeNumber(shape)}
+                {position.get(shape.id)}
               </span>
             )
           })}
           {shownBox && (
-            <div
-              className={`shape-box${!draft && pendingBox ? ' searching' : ''}`}
-              style={boxStyle(shownBox)}
-              aria-hidden="true"
-            />
+            <div className={`shape-box${!draft && pendingBox ? ' searching' : ''}`} style={boxStyle(shownBox)} aria-hidden="true" />
           )}
+          {selectionBar}
         </div>
-        <p className="shape-hint">Click a shape to pick it. Drag a box around anything it missed.</p>
       </div>
 
       <div className="shape-list-wrap">
-        {shapes.length > 0 ? (
-          <div className="shape-list-head">
-            <span>
-              {pickedCount} of {shapes.length} picked
-            </span>
-            <span className="shape-list-actions">
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => onPickAll(true)}
-                disabled={pickedCount === shapes.length}
-                aria-label="Pick all shapes"
-              >
-                All
-              </button>
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => onPickAll(false)}
-                disabled={pickedCount === 0}
-                aria-label="Pick no shapes"
-              >
-                None
-              </button>
-            </span>
-          </div>
-        ) : (
-          <p className="shape-empty">No shapes yet. Drag a box around something on the photo.</p>
+        {listHead}
+        {shapes.length === 0 && (
+          <p className="shape-empty">Nothing found yet. Drag a box around something on the photo and it’ll appear here.</p>
         )}
         <ul className="shape-list">
           {shapes.map((shape) => {
-            const n = shapeNumber(shape)
+            const n = position.get(shape.id)!
             const target = picks[shape.id]
             return (
               <li
@@ -244,23 +237,29 @@ export default function ShapePicker({
                 onMouseEnter={() => setHovered(shape.id)}
                 onMouseLeave={() => setHovered(null)}
               >
-                <button
-                  type="button"
-                  role="checkbox"
-                  aria-checked={Boolean(target)}
-                  className="shape-row"
-                  onClick={() => onToggle(shape.id)}
-                >
-                  <span className="shape-num" aria-hidden="true">
-                    {n}
-                  </span>
-                  <span className="shape-row-text">
-                    <span className="shape-row-name">Shape {n}</span>
-                    <span className="shape-row-kind">
-                      {shape.kind === 'quad' ? 'Four corners' : 'Traced outline'}
+                <Tooltip label={target ? 'Unpick' : 'Pick'} keys={n <= 9 ? [String(n)] : undefined}>
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={Boolean(target)}
+                    className="shape-row"
+                    onClick={() => onToggle(shape.id)}
+                  >
+                    <span className="shape-num" aria-hidden="true">
+                      {n}
                     </span>
-                  </span>
-                </button>
+                    <span className="shape-row-text">
+                      <span className="shape-row-name">Shape {n}</span>
+                      <span className="shape-row-kind">
+                        {shape.kind === 'quad'
+                          ? 'Four corners'
+                          : shape.rings
+                            ? `Traced, ${shape.rings.length} pieces`
+                            : 'Traced outline'}
+                      </span>
+                    </span>
+                  </button>
+                </Tooltip>
                 {target && (
                   <select
                     className="shape-target"

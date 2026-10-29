@@ -35,7 +35,7 @@ test('scan: the phone opens the link, sends a photo, and it goes on the surface'
 
   // The phone opens the page.
   const html = await fetch(url).then((r) => r.text())
-  expect(html).toContain('Photo for MirrorCat')
+  expect(html).toContain('Cat’s camera')
   await expect(dialog.getByRole('status')).toContainText('Phone connected')
 
   // ...and sends a JPEG (made in the editor page, standing in for the camera).
@@ -158,7 +158,7 @@ test('live scan: the projector shows the frame, MirrorCat finds it, and the phot
     await lineUp.getByRole('button', { name: 'Continue' }).click()
     // Nothing but the wall and the pattern in this photo: no shapes to offer.
     const shapes = page.getByRole('dialog', { name: 'Pick the shapes' })
-    await expect(shapes.getByRole('status')).toContainText('Didn’t find any flat shapes', { timeout: 10000 })
+    await expect(shapes.getByRole('status')).toContainText('No shapes found yet', { timeout: 10000 })
     await shapes.getByRole('button', { name: 'Project the whole photo' }).click()
     await expect(shapes).toHaveCount(0)
     await expect(page.locator('.surface-header', { hasText: 'Scan' })).toBeVisible()
@@ -237,9 +237,8 @@ test('live scan: shapes in the photo become surfaces with their corners in place
     await lineUp.getByRole('button', { name: 'Continue' }).click()
 
     const picker = page.getByRole('dialog', { name: 'Pick the shapes' })
-    await expect(picker.getByRole('status')).toContainText('Found 2 shapes', { timeout: 10000 })
     const rows = picker.getByRole('checkbox')
-    await expect(rows).toHaveCount(2)
+    await expect(rows).toHaveCount(2, { timeout: 10000 })
     await expect(rows.nth(0)).toContainText('Four corners')
     await expect(rows.nth(1)).toContainText('Traced outline')
     await page.screenshot({ path: 'test-results/scan-shapes.png' })
@@ -339,7 +338,10 @@ const SAM_DIR = join(
  * frame running off the bottom of the frame (art inside it), line it up,
  * and continue to the shape picker.
  */
-async function scanFramedPicture(run: Launched): Promise<import('@playwright/test').Locator> {
+async function scanFramedPicture(
+  run: Launched,
+  scene: 'framed' | 'frame-and-mirror' = 'framed'
+): Promise<import('@playwright/test').Locator> {
   const { page, app } = run
   const output = await goLive({ app, page })
   await page.getByRole('button', { name: 'Scan', exact: true }).click()
@@ -349,7 +351,7 @@ async function scanFramedPicture(run: Launched): Promise<import('@playwright/tes
   const shot = await output.screenshot()
   const alt = (await dialog.getByRole('img', { name: /QR code for/ }).getAttribute('alt'))!
   const url = alt.replace('QR code for ', '')
-  const photo = await page.evaluate(async (png) => {
+  const photo = await page.evaluate(async ([png, layout]) => {
     const bitmap = await createImageBitmap(new Blob([new Uint8Array(png)], { type: 'image/png' }))
     const c = document.createElement('canvas')
     c.width = 1500
@@ -358,17 +360,27 @@ async function scanFramedPicture(run: Launched): Promise<import('@playwright/tes
     ctx.fillStyle = '#1a1a1a'
     ctx.fillRect(0, 0, c.width, c.height)
     ctx.drawImage(bitmap, c.width * 0.1, c.height * 0.1, c.width * 0.8, c.height * 0.8)
-    // The frame: photo 30–60% across, from 40% down past the projector frame's bottom (90%).
-    ctx.fillStyle = '#231f24'
-    ctx.fillRect(c.width * 0.3, c.height * 0.4, c.width * 0.3, c.height * 0.5)
-    ctx.fillStyle = '#245a43'
-    ctx.fillRect(c.width * 0.32, c.height * 0.43, c.width * 0.26, c.height * 0.47)
+    if (layout === 'framed') {
+      // The frame: photo 30–60% across, from 40% down past the projector frame's bottom (90%).
+      ctx.fillStyle = '#231f24'
+      ctx.fillRect(c.width * 0.3, c.height * 0.4, c.width * 0.3, c.height * 0.5)
+      ctx.fillStyle = '#245a43'
+      ctx.fillRect(c.width * 0.32, c.height * 0.43, c.width * 0.26, c.height * 0.47)
+    } else {
+      // A dark picture frame and a round mirror.
+      ctx.fillStyle = '#2a2622'
+      ctx.fillRect(c.width * 0.3, c.height * 0.35, c.width * 0.2, c.height * 0.3)
+      ctx.fillStyle = '#d8dde0'
+      ctx.beginPath()
+      ctx.arc(c.width * 0.68, c.height * 0.5, c.height * 0.13, 0, Math.PI * 2)
+      ctx.fill()
+    }
     // Cover anything outside the projector frame again (the wall beyond it is dark).
     ctx.fillStyle = '#1a1a1a'
     ctx.fillRect(0, c.height * 0.9, c.width, c.height * 0.1)
     const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), 'image/jpeg', 0.92))
     return Array.from(new Uint8Array(await blob.arrayBuffer()))
-  }, Array.from(shot))
+  }, [Array.from(shot), scene] as const)
   const sent = await fetch(`${url}/photo`, {
     method: 'POST',
     headers: { 'Content-Type': 'image/jpeg' },
@@ -379,7 +391,7 @@ async function scanFramedPicture(run: Launched): Promise<import('@playwright/tes
   await expect(lineUp.getByRole('status')).toContainText('Found the projector frame', { timeout: 10000 })
   await lineUp.getByRole('button', { name: 'Continue' }).click()
   const picker = page.getByRole('dialog', { name: 'Pick the shapes' })
-  await expect(picker.getByRole('status').first()).toContainText(/Found|Didn’t find/, { timeout: 10000 })
+  await expect(picker.getByRole('status').first()).not.toContainText('Looking for shapes', { timeout: 10000 })
   return picker
 }
 
@@ -442,13 +454,67 @@ test('the detailed finder (SAM 2) finds more shapes and answers boxes', async ()
   try {
     const picker = await scanFramedPicture(run)
     await picker.getByRole('button', { name: 'Find more shapes' }).click()
-    await expect(picker.getByRole('status').filter({ hasText: /more\.|No new shapes/ })).toBeVisible({ timeout: 60000 })
+    await expect(picker.getByRole('status').filter({ hasText: /more\. Click|Nothing new/ })).toBeVisible({ timeout: 60000 })
     await picker.getByRole('button', { name: 'Pick no shapes' }).click()
     await dragBox(picker, { x0: 0.23, y0: 0.35, x1: 0.645, y1: 0.995 })
     await expect(picker.getByRole('button', { name: 'Make 1 surface' })).toBeVisible({ timeout: 30000 })
     await run.page.screenshot({ path: 'test-results/scan-sam.png' })
     await picker.getByRole('button', { name: 'Make 1 surface' }).click()
     await expectOneSurfaceOnFrame(run, 0.03)
+    expect(run.problems).toEqual([])
+  } finally {
+    await run.close()
+  }
+})
+
+test('combine, remove and undo, by mouse and by keyboard', async () => {
+  const run = await launchApp({ scene: scene(), env: { MIRRORCAT_CAPTURE_HOST: '127.0.0.1', MIRRORCAT_SAM_DIR: '/nonexistent' } })
+  try {
+    const picker = await scanFramedPicture(run, 'frame-and-mirror')
+    const { page } = run
+    const rows = picker.getByRole('checkbox')
+    await expect(rows).toHaveCount(2)
+    const count = 2
+
+    // Keyboard: pick none, then 1 and 2.
+    await picker.getByTestId('shape-stage').hover()
+    await page.keyboard.press('ControlOrMeta+D')
+    await expect(picker.getByText(`0 of ${count} picked`)).toBeVisible()
+    await page.keyboard.press('1')
+    await page.keyboard.press('2')
+    const bar = picker.locator('.selection-bar')
+    await expect(bar).toContainText('2 picked')
+
+    // The tooltip on Combine shows its key.
+    await bar.getByRole('button', { name: 'Combine picked shapes' }).hover()
+    await expect(page.getByRole('tooltip')).toContainText('Combine into one shape')
+    await expect(page.getByRole('tooltip').locator('kbd')).toHaveText('C')
+    await page.screenshot({ path: 'test-results/scan-combine-tooltip.png' })
+
+    await page.keyboard.press('c')
+    await expect(rows).toHaveCount(count - 1)
+    await expect(bar).toContainText('1 picked')
+
+    // Undo brings both back.
+    await bar.getByRole('button', { name: 'Undo' }).click()
+    await expect(rows).toHaveCount(count)
+
+    // Remove with the key; undo with the shortcut.
+    await page.keyboard.press('ControlOrMeta+D')
+    await page.keyboard.press('1')
+    await page.keyboard.press('Backspace')
+    await expect(rows).toHaveCount(count - 1)
+    await page.keyboard.press('ControlOrMeta+Z')
+    await expect(rows).toHaveCount(count)
+
+    // The shortcuts list.
+    await page.keyboard.press('?')
+    await expect(picker.getByRole('dialog', { name: 'Keyboard shortcuts' })).toContainText('Combine picked shapes')
+    await page.screenshot({ path: 'test-results/scan-shortcuts.png' })
+    await page.keyboard.press('Escape')
+    await expect(picker.getByRole('dialog', { name: 'Keyboard shortcuts' })).toHaveCount(0)
+    // That Esc closed only the list, not the scan.
+    await expect(picker).toBeVisible()
     expect(run.problems).toEqual([])
   } finally {
     await run.close()

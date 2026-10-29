@@ -165,7 +165,6 @@ export function addCandidates(
 ): { added: DetectedShape[]; existing: DetectedShape[] } {
   const added: DetectedShape[] = []
   const existing: DetectedShape[] = []
-  let next = scan.shapes.reduce((n, s) => Math.max(n, Number(s.id.replace(/\D/g, '')) || 0), 0) + 1
   for (const c of [...candidates].sort((a, b) => b.score - a.score)) {
     const match = scan.shapes.find((s) => iou(scan.regions.get(s.id)!, c.region) >= DUPLICATE_IOU)
     if (match) {
@@ -173,7 +172,7 @@ export function addCandidates(
       continue
     }
     if (added.length >= limit) continue
-    const shape: DetectedShape = { ...c.shape, id: `shape-${next++}` }
+    const shape: DetectedShape = { ...c.shape, id: nextShapeId(scan) }
     scan.shapes.push(shape)
     scan.regions.set(shape.id, c.region)
     added.push(shape)
@@ -249,9 +248,26 @@ function describe(
   bonus: number,
   minSolidity = MIN_SOLIDITY
 ): Candidate | null {
-  const outline = traceOutline(region)
-  if (outline.length < 8) return null
-  const hull = convexHull(outline)
+  return fit(region, [traceOutline(region)], width, height, bonus, minSolidity)
+}
+
+/**
+ * Fit a region whose outline is one or more rings (several when shapes
+ * that don't touch are combined): a quad if its hull is close to
+ * four-sided and it fills it, else a traced shape in a padded rectangle.
+ */
+function fit(
+  region: Region,
+  rings: Point[][],
+  width: number,
+  height: number,
+  bonus: number,
+  minSolidity: number
+): Candidate | null {
+  const kept = rings.filter((r) => r.length >= 8)
+  if (kept.length === 0) return null
+  const all = kept.flat()
+  const hull = convexHull(all)
   const hullArea = polygonArea(hull)
   // Pixel counts include half a pixel around the traced centres.
   const solidity = region.count / (hullArea + perimeter(hull) / 2 + 1)
@@ -259,15 +275,15 @@ function describe(
 
   let cx = 0
   let cy = 0
-  for (const p of outline) {
+  for (const p of all) {
     cx += p.x
     cy += p.y
   }
-  cx /= outline.length
-  cy /= outline.length
+  cx /= all.length
+  cy /= all.length
 
   const norm = (p: Point): Point => ({ x: (p.x + 0.5) / width, y: (p.y + 0.5) / height })
-  const quad = solidity > 0.88 ? fitQuad(hull, outline) : null
+  const quad = solidity > 0.88 ? fitQuad(hull, all) : null
   const quadArea = quad ? polygonArea(quad) : 0
   const isQuad = quad !== null && quadArea > hullArea * 0.92 && quadArea < hullArea * 1.1
   // A traced shape's rectangle gets a few pixels of room, so the mask's soft
@@ -275,18 +291,61 @@ function describe(
   const fitted = isQuad ? quad! : padded(minAreaRect(hull), 3)
   const corners = orderCorners(fitted.map(norm))
   if (!squareToQuad(corners)) return null
-  return {
-    shape: {
-      kind: isQuad ? 'quad' : 'outline',
-      corners,
-      outline: isQuad ? corners.map((c) => ({ ...c })) : simplifyClosed(outline, 1.2).map(norm),
-      area: region.count / (width * height)
-    },
-    region,
-    score: (isQuad ? 1 : 0) + solidity + bonus,
-    cx,
-    cy
+  const traced = kept
+    .sort((a, b) => polygonArea(b) - polygonArea(a))
+    .map((r) => simplifyClosed(r, 1.2).map(norm))
+  const shape: Omit<DetectedShape, 'id'> = {
+    kind: isQuad ? 'quad' : 'outline',
+    corners,
+    outline: isQuad ? corners.map((c) => ({ ...c })) : traced[0],
+    area: region.count / (width * height)
   }
+  if (!isQuad && traced.length > 1) shape.rings = traced
+  return { shape, region, score: (isQuad ? 1 : 0) + solidity + bonus, cx, cy }
+}
+
+/**
+ * Several shapes as one: their pixels together, fitted afresh (two halves
+ * of a door become a door; a lamp's shade and base one cut-out). Shapes
+ * that don't touch stay separate pieces of one surface's mask. The parts
+ * stay in the scan, so undo can bring them back.
+ */
+export function combineShapes(scan: ShapeScan, ids: string[]): DetectedShape | null {
+  const parts = [...new Set(ids)].map((id) => scan.regions.get(id)).filter((r): r is Region => Boolean(r))
+  if (parts.length < 2) return null
+  const x0 = Math.min(...parts.map((r) => r.x))
+  const y0 = Math.min(...parts.map((r) => r.y))
+  const w = Math.max(...parts.map((r) => r.x + r.width)) - x0
+  const h = Math.max(...parts.map((r) => r.y + r.height)) - y0
+  const data = new Uint8Array(w * h)
+  for (const r of parts) {
+    for (let y = 0; y < r.height; y++) {
+      const row = (y + r.y - y0) * w + r.x - x0
+      for (let x = 0; x < r.width; x++) if (r.data[y * r.width + x]) data[row + x] = 1
+    }
+  }
+  let count = 0
+  for (const v of data) count += v
+  const region: Region = { x: x0, y: y0, width: w, height: h, data, count }
+
+  // Trace each piece on its own.
+  const { labels, components } = label(data, w, h)
+  const rings = components
+    .filter((c) => c.count >= 20)
+    .map((c) => {
+      const piece = regionOf(labels, c, w, h, 0)
+      return traceOutline({ ...piece, x: piece.x + x0, y: piece.y + y0 })
+    })
+  const candidate = fit(region, rings, scan.width, scan.height, 0, 0)
+  if (!candidate) return null
+  const shape: DetectedShape = { ...candidate.shape, id: nextShapeId(scan) }
+  scan.shapes.push(shape)
+  scan.regions.set(shape.id, region)
+  return shape
+}
+
+function nextShapeId(scan: ShapeScan): string {
+  return `shape-${scan.shapes.reduce((n, s) => Math.max(n, Number(s.id.replace(/\D/g, '')) || 0), 0) + 1}`
 }
 
 /**

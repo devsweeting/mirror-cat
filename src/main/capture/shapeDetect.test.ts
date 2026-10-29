@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addCandidates, bestInBox, candidateFromMask, findShapes, regionMask, shapeDetectSize } from './shapeDetect'
+import { addCandidates, bestInBox, candidateFromMask, combineShapes, findShapes, regionMask, shapeDetectSize } from './shapeDetect'
 import { markerPlacements } from '../../shared/scanPattern'
 import { pointInPolygon, type DetectedShape } from '../../shared/shapes'
 import type { Point } from '../../shared/homography'
@@ -170,6 +170,44 @@ describe('candidates from masks and boxes', () => {
     expect(bestInBox(scan, frameBox)!.shape.corners[0].x * W).toBeCloseTo(200, -1)
     expect(bestInBox(scan, pictureBox)!.shape.corners[0].x * W).toBeCloseTo(216, -1)
     expect(bestInBox(scan, { x0: 0.02, y0: 0.4, x1: 0.1, y1: 0.5 })).toBeNull()
+  })
+})
+
+describe('combineShapes', () => {
+  it('makes two halves of a door one four-sided shape', () => {
+    const rgba = wall()
+    paint(rgba, (x, y) => x >= 200 && x < 300 && y >= 60 && y < 300, 40)
+    paint(rgba, (x, y) => x >= 302 && x < 400 && y >= 60 && y < 300, 70)
+    const scan = findShapes(rgba, W, H)
+    const halves = scan.shapes.filter((s) => s.kind === 'quad' && s.area < 0.12)
+    expect(halves).toHaveLength(2)
+    const door = combineShapes(scan, halves.map((s) => s.id))!
+    expect(door.kind).toBe('quad')
+    expect(door.corners[0].x * W).toBeCloseTo(200, -1)
+    expect(door.corners[1].x * W).toBeCloseTo(400, -1)
+    expect(door.id).toBe(`shape-${scan.shapes.length}`)
+    // The halves stay in the scan, so undo can bring them back.
+    expect(scan.regions.has(halves[0].id)).toBe(true)
+  })
+
+  it('keeps shapes that don’t touch as pieces of one traced shape', () => {
+    const rgba = wall()
+    paint(rgba, (x, y) => Math.hypot(x - 150, y - 180) < 50, 40)
+    paint(rgba, (x, y) => Math.hypot(x - 480, y - 180) < 50, 40)
+    const scan = findShapes(rgba, W, H)
+    expect(scan.shapes).toHaveLength(2)
+    const both = combineShapes(scan, scan.shapes.map((s) => s.id))!
+    expect(both.kind).toBe('outline')
+    expect(both.rings).toHaveLength(2)
+    expect(both.area).toBeCloseTo(scan.shapes[0].area + scan.shapes[1].area, 3)
+  })
+
+  it('needs at least two known shapes', () => {
+    const rgba = wall()
+    paint(rgba, (x, y) => x >= 100 && x < 200 && y >= 100 && y < 200, 40)
+    const scan = findShapes(rgba, W, H)
+    expect(combineShapes(scan, ['shape-1'])).toBeNull()
+    expect(combineShapes(scan, ['shape-1', 'shape-99'])).toBeNull()
   })
 })
 

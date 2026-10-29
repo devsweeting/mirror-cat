@@ -103,6 +103,9 @@ const capture = {
   /** The shape inside a box (0..1 of the frame). */
   findInBox: (assetId: string, box: FrameBox): Promise<BoxResult> =>
     ipcRenderer.invoke(IpcChannels.CaptureFindInBox, assetId, box),
+  /** Several found shapes as one new shape (null if they can't be combined). */
+  combineShapes: (assetId: string, shapeIds: string[]): Promise<DetectedShape | null> =>
+    ipcRenderer.invoke(IpcChannels.CaptureCombineShapes, assetId, shapeIds),
   samStatus: (): Promise<SamStatus> => ipcRenderer.invoke(IpcChannels.SamStatus),
   samDownload: (): Promise<SamStatus> => ipcRenderer.invoke(IpcChannels.SamDownload),
   samCancel: (): Promise<SamStatus> => ipcRenderer.invoke(IpcChannels.SamCancel),

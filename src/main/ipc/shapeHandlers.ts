@@ -1,12 +1,9 @@
 import { app, ipcMain, nativeImage, net } from 'electron'
-import { join } from 'path'
 import { IpcChannels } from '../../shared/ipcChannels'
-import { ASSET_ID_PATTERN } from '../../shared/media'
 import { MASK_PAINT_EDGE } from '../../shared/mask'
 import { cornersAspect } from '../../shared/proportionalResize'
-import type { BoxResult, FrameBox, SamStatus } from '../../shared/sam'
+import type { BoxResult, SamStatus } from '../../shared/sam'
 import type { DetectedShape } from '../../shared/shapes'
-import type { CornerSet } from '../../shared/types'
 import type { MediaLibrary } from '../media/mediaLibrary'
 import type { MaskStore } from '../masks/maskStore'
 import { bgraToRgba } from '../capture/frameDetect'
@@ -14,73 +11,45 @@ import {
   addCandidates,
   bestInBox,
   candidateFromMask,
-  findShapes,
+  combineShapes,
   regionMask,
   shapeDetectSize,
   type Candidate,
   type ShapeScan
 } from '../capture/shapeDetect'
-import { SamClient } from '../segment/samClient'
-import { SAM_DIR_NAME, SAM_TOTAL_BYTES, downloadSam, samInstalled } from '../segment/samModel'
-import { SAM_SIZE, gridPoints, logitsToMask, preprocessBgra, stabilityScore } from '../segment/samMasks'
+import { SAM_TOTAL_BYTES, downloadSam, samInstalled } from '../segment/samModel'
+import { SAM_SIZE, gridPoints, logitsToMask, preprocessBgra } from '../segment/samMasks'
+import { samModelDir, vision } from '../segment/vision'
 import { getControlWindow } from '../windows/controlWindow'
 import { requireControlWindow } from './trust'
+import { isAssetId, parseBox, parseCorners, parseShapeIds } from './validate'
 
 /** "Find more": SAM's own quality bars for keeping an answer. */
 const MIN_PREDICTED_IOU = 0.7
 const MIN_STABILITY = 0.85
 const MORE_SHAPES_LIMIT = 16
 
-let sam: SamClient | null = null
+/** The last shape scan, kept so masks, boxes and combining can work from it. */
+let last: { assetId: string; scan: ShapeScan } | null = null
 
-/** Free the shape finder's process (the Scan dialog closed). */
+/** The Scan dialog closed: free the vision process and the scan. */
 export function stopShapeFinder(): void {
-  sam?.stop()
-}
-
-function parseCorners(value: unknown): CornerSet | null {
-  if (!Array.isArray(value) || value.length !== 4) return null
-  const ok = value.every(
-    (c) =>
-      c &&
-      typeof c === 'object' &&
-      Number.isFinite((c as { x: number }).x) &&
-      Number.isFinite((c as { y: number }).y) &&
-      Math.abs((c as { x: number }).x) < 100 &&
-      Math.abs((c as { y: number }).y) < 100
-  )
-  return ok ? (value.map((c) => ({ x: c.x, y: c.y })) as CornerSet) : null
-}
-
-/** A box inside the frame with some size to it, or null. */
-function parseBox(value: unknown): FrameBox | null {
-  const b = value as Partial<FrameBox> | null
-  if (!b || typeof b !== 'object') return null
-  const v = [b.x0, b.y0, b.x1, b.y1]
-  if (!v.every((n) => typeof n === 'number' && Number.isFinite(n))) return null
-  const clamp = (n: number): number => Math.min(1, Math.max(0, n))
-  const box = { x0: clamp(b.x0!), y0: clamp(b.y0!), x1: clamp(b.x1!), y1: clamp(b.y1!) }
-  return box.x1 - box.x0 > 0.01 && box.y1 - box.y0 > 0.01 ? box : null
+  vision.stop()
+  last = null
 }
 
 /**
- * Shapes: the built-in finder, exact masks for picked shapes, and the
- * detailed finder (SAM 2) -- its one-time download, "find more" and boxes.
+ * Shapes: finding them (in the vision process), exact masks for picked
+ * shapes, combining, and the detailed finder (SAM 2) -- its one-time
+ * download, "find more" and boxes.
  */
 export function registerShapeHandlers({ library, masks }: { library: MediaLibrary; masks: MaskStore }): void {
-  // Dev/e2e can point at an existing model; a packaged app always uses userData.
-  const override = !app.isPackaged ? process.env.MIRRORCAT_SAM_DIR : undefined
-  const modelDir = (): string => override || join(app.getPath('userData'), 'models', SAM_DIR_NAME)
-  sam = new SamClient(modelDir)
-
-  // The last shape scan, kept so masks and boxes can work from it.
-  let last: { assetId: string; scan: ShapeScan } | null = null
   let download: { controller: AbortController; received: number } | null = null
   let failure: string | null = null
 
   const status = async (): Promise<SamStatus> => {
     if (download) return { state: 'downloading', receivedBytes: download.received, totalBytes: SAM_TOTAL_BYTES }
-    if (await samInstalled(modelDir())) return { state: 'ready', totalBytes: SAM_TOTAL_BYTES }
+    if (await samInstalled(samModelDir())) return { state: 'ready', totalBytes: SAM_TOTAL_BYTES }
     if (failure) return { state: 'failed', totalBytes: SAM_TOTAL_BYTES, message: failure }
     return { state: 'missing', totalBytes: SAM_TOTAL_BYTES }
   }
@@ -93,35 +62,38 @@ export function registerShapeHandlers({ library, masks }: { library: MediaLibrar
   const scanFor = (id: unknown): ShapeScan | null =>
     last && typeof id === 'string' && last.assetId === id ? last.scan : null
 
-  /** Have SAM read the fitted photo (once per photo). */
+  /** Have SAM read the fitted photo (once per photo; a read in progress is joined). */
   const readPhoto = async (assetId: string): Promise<void> => {
     const asset = library.get(assetId)
-    if (!asset) throw new Error('That photo is gone')
+    if (!asset) throw new Error('That photo is gone. Take another scan.')
     try {
-      await sam!.usePhoto(assetId, () => {
+      await vision.usePhoto(assetId, () => {
         const image = nativeImage.createFromPath(library.filePath(asset))
         return preprocessBgra(image.resize({ width: SAM_SIZE, height: SAM_SIZE, quality: 'best' }).toBitmap())
       })
     } catch (error) {
       console.error('[shapes] the detailed finder failed', error)
-      sam!.stop()
+      vision.stop()
       throw new Error('The detailed finder couldn’t read this photo. Try again, or draw the shape with the mask tools.')
     }
   }
 
-  // ---------- Built-in finder and masks ----------
+  // ---------- Built-in finder, masks, combining ----------
 
-  ipcMain.handle(IpcChannels.CaptureFindShapes, (event, id: unknown): DetectedShape[] => {
+  ipcMain.handle(IpcChannels.CaptureFindShapes, async (event, id: unknown): Promise<DetectedShape[]> => {
     requireControlWindow(event)
-    const asset = typeof id === 'string' && ASSET_ID_PATTERN.test(id) ? library.get(id) : undefined
+    const asset = isAssetId(id) ? library.get(id) : undefined
     if (!asset || asset.kind !== 'image') return []
     const image = nativeImage.createFromPath(library.filePath(asset))
     if (image.isEmpty()) return []
     const size = shapeDetectSize(image.getSize().width, image.getSize().height)
     const pixels = bgraToRgba(image.resize({ ...size, quality: 'good' }).toBitmap())
     try {
-      const scan = findShapes(pixels, size.width, size.height)
+      const scan = await vision.findShapes(pixels, size.width, size.height)
       last = { assetId: asset.id, scan }
+      // With the detailed finder here, start reading the photo now so the
+      // first box answers in a blink instead of a few seconds.
+      if (await samInstalled(samModelDir())) readPhoto(asset.id).catch(() => undefined)
       return scan.shapes
     } catch (error) {
       console.error('[shapes] shape finding failed', error)
@@ -130,8 +102,8 @@ export function registerShapeHandlers({ library, masks }: { library: MediaLibrar
   })
 
   // An exact mask for one found shape, in the space of a surface with these
-  // corners, stored like any other mask. Null if that scan is gone (the app
-  // restarted) or the corners don't make a shape.
+  // corners, stored like any other mask. Null if that scan is gone or the
+  // corners don't make a shape.
   ipcMain.handle(
     IpcChannels.CaptureShapeMask,
     async (event, assetId: unknown, shapeId: unknown, corners: unknown): Promise<string | null> => {
@@ -155,6 +127,18 @@ export function registerShapeHandlers({ library, masks }: { library: MediaLibrar
     }
   )
 
+  // Several shapes as one new shape (the parts stay in the scan for undo).
+  ipcMain.handle(
+    IpcChannels.CaptureCombineShapes,
+    (event, assetId: unknown, ids: unknown): DetectedShape | null => {
+      requireControlWindow(event)
+      const scan = scanFor(assetId)
+      const shapeIds = parseShapeIds(ids)
+      if (!scan || !shapeIds || shapeIds.length < 2) return null
+      return combineShapes(scan, shapeIds)
+    }
+  )
+
   // ---------- Detailed finder (SAM 2) ----------
 
   ipcMain.handle(IpcChannels.SamStatus, (event) => {
@@ -164,14 +148,14 @@ export function registerShapeHandlers({ library, masks }: { library: MediaLibrar
 
   ipcMain.handle(IpcChannels.SamDownload, async (event): Promise<SamStatus> => {
     requireControlWindow(event)
-    if (download || (await samInstalled(modelDir()))) return status()
+    if (download || (await samInstalled(samModelDir()))) return status()
     const controller = new AbortController()
     download = { controller, received: 0 }
     failure = null
     let lastSent = 0
     try {
       await downloadSam(
-        modelDir(),
+        samModelDir(),
         (url, init) => net.fetch(url, init),
         (received) => {
           if (download) download.received = received
@@ -206,19 +190,15 @@ export function registerShapeHandlers({ library, masks }: { library: MediaLibrar
   ipcMain.handle(IpcChannels.CaptureFindMore, async (event, assetId: unknown): Promise<DetectedShape[]> => {
     requireControlWindow(event)
     const scan = scanFor(assetId)
-    if (!scan || !(await samInstalled(modelDir()))) return []
+    if (!scan || !(await samInstalled(samModelDir()))) return []
     await readPhoto(assetId as string)
+    const answers = await vision.grid(gridPoints(scan.width, scan.height), MIN_PREDICTED_IOU, MIN_STABILITY)
     const found: Candidate[] = []
-    for (const point of gridPoints(scan.width, scan.height)) {
-      const answer = await sam!.decode({ point })
-      if (answer.objectScore <= 0) continue
-      for (let k = 0; k < answer.count; k++) {
-        if (answer.ious[k] < MIN_PREDICTED_IOU || stabilityScore(answer.logits, k) < MIN_STABILITY) continue
-        const mask = logitsToMask(answer.logits, k, scan.width, scan.height)
-        // Unprompted answers over half the frame are the wall around things, not a thing.
-        const candidate = candidateFromMask(mask, scan.width, scan.height, { maxArea: 0.5 })
-        if (candidate) found.push(candidate)
-      }
+    for (const { logits } of answers) {
+      // Unprompted answers over half the frame are the wall around things, not a thing.
+      const mask = logitsToMask(logits, 0, scan.width, scan.height)
+      const candidate = candidateFromMask(mask, scan.width, scan.height, { maxArea: 0.5 })
+      if (candidate) found.push(candidate)
     }
     return addCandidates(scan, found, MORE_SHAPES_LIMIT).added
   })
@@ -231,9 +211,9 @@ export function registerShapeHandlers({ library, masks }: { library: MediaLibrar
     const box = parseBox(value)
     if (!scan || !box) return { found: 'nothing' }
     let candidate: Candidate | null = null
-    if (await samInstalled(modelDir())) {
+    if (await samInstalled(samModelDir())) {
       await readPhoto(assetId as string)
-      const answer = await sam!.decode({ box: [box.x0, box.y0, box.x1, box.y1].map((v) => v * SAM_SIZE) })
+      const answer = await vision.decode({ box: [box.x0, box.y0, box.x1, box.y1].map((v) => v * SAM_SIZE) })
       // Best-rated mask first; the box says what you meant, so it may touch up to three sides.
       const order = answer.ious.map((iou, k) => ({ iou, k })).sort((a, b) => b.iou - a.iou)
       for (const { k } of order) {
@@ -247,18 +227,23 @@ export function registerShapeHandlers({ library, masks }: { library: MediaLibrar
     if (!candidate) return { found: 'nothing' }
     const { added, existing } = addCandidates(scan, [candidate], 1)
     if (added[0]) return { found: 'new', shape: added[0] }
-    if (existing[0]) return { found: 'existing', shapeId: existing[0].id }
+    if (existing[0]) return { found: 'existing', shape: existing[0] }
     return { found: 'nothing' }
   })
 
   app.on('before-quit', () => {
     download?.controller.abort()
-    sam?.stop()
+    stopShapeFinder()
   })
 }
 
 /** Keep only the part of a mask within the box (plus a little room). */
-function clipToBox(mask: Uint8Array, width: number, height: number, box: FrameBox): Uint8Array {
+function clipToBox(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  box: { x0: number; y0: number; x1: number; y1: number }
+): Uint8Array {
   const m = 0.03
   const x0 = Math.floor((box.x0 - m) * width)
   const x1 = Math.ceil((box.x1 + m) * width)

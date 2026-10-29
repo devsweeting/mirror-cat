@@ -60,6 +60,8 @@ export interface MirrorCatCaptureApi {
   findMore(assetId: string): Promise<DetectedShape[]>
   /** The shape inside a box (0..1 of the frame). */
   findInBox(assetId: string, box: FrameBox): Promise<BoxResult>
+  /** Several found shapes as one new shape (null if they can't be combined). */
+  combineShapes(assetId: string, shapeIds: string[]): Promise<DetectedShape | null>
   samStatus(): Promise<SamStatus>
   /** Download the detailed finder's model; resolves when it's done (or failed/cancelled). */
   samDownload(): Promise<SamStatus>

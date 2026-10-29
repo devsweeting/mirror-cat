@@ -1,3 +1,5 @@
+import type { DetectedShape } from './shapes'
+
 /**
  * The detailed shape finder (SAM 2.1, tiny) -- its status as the editor
  * sees it. The model is a one-time download kept in userData/models; it
@@ -19,8 +21,9 @@ export interface FrameBox {
 
 /** What a box found: a new shape, or one already in the list. */
 export type BoxResult =
-  | { found: 'new'; shape: import('./shapes').DetectedShape }
-  | { found: 'existing'; shapeId: string }
+  | { found: 'new'; shape: DetectedShape }
+  /** Already in the scan (maybe removed from the list since): pick it, adding it back if needed. */
+  | { found: 'existing'; shape: DetectedShape }
   | { found: 'nothing' }
 
 export function formatMegabytes(bytes: number): string {

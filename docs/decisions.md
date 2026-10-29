@@ -721,3 +721,79 @@ only where it's downloaded), Find more completes and a box on the frame
 gives its corners within 3%. On Devin's own photo the frame now comes
 back as a quad at its true corners.
 
+## 033 Scan, refined: Cat talks you through it, shapes combine, everything has a key
+*2026-10-28 · Accepted*
+
+**Context.** Devin asked for a pass on the scan experience. He wanted
+tooltips with keyboard commands, clearer ways to combine and create
+shapes, a design pass, and a code-quality and performance review. On the
+phone, he wanted Cat's eyes first and prominent, talking you through the
+photo.
+
+**Decision.**
+- **Phone page.** Cat's eyes lead: big, glowing, the same shapes as the
+  editor's. The instructions are lines Cat says, in its own voice ("Hi,
+  I'm Cat…").
+  - On load, one ~4 s sequence: each line fades in while the eyes squint
+    and glance where it matters (to the side for "next to the
+    projector", down for "hold level", up for "the whole frame").
+  - The eyes then react to what happens: they dart while sending, turn
+    into happy arcs when the photo is in, and tilt wide on an error.
+    Tapping the eyes replays the lines.
+  - The expired page shows shut eyes ("gone to sleep").
+  - Everything stays inside the nonce CSP: no inline style attributes.
+    Reduced motion gets everything at once.
+- **Pick the shapes.**
+  - Picked shapes are lit: an amber line with a glow, as if the
+    projector were already on them.
+  - Under the photo, three gestures, each with the mark it makes: click to
+    pick, drag to draw, pick two or more to combine.
+  - A selection bar floats on the photo, with Combine, Remove and Undo.
+  - Shapes are numbered by list position, so 1–9 match the keys.
+- **Combine** (`capture:combine-shapes`, `combineShapes`) joins the
+  shapes' pixels and fits them afresh. Two halves of a door become a quad;
+  pieces that don't touch become one traced shape with several rings
+  (`DetectedShape.rings`). The parts stay in main's scan, so undo
+  (renderer history, 20 steps) can restore them. A box drawn on a removed
+  shape brings it back (`BoxResult.existing` now carries the shape).
+- **Keys:** 1–9 pick, ⌘A all, ⌘D none, C combine, ⌫ remove, ⌘Z undo,
+  F find more, ↵ make surfaces, Esc cancels a box (then closes), ? lists
+  them.
+  - `Tooltip` shows a label plus keycaps: in a portal, after 350 ms on
+    hover, at once on keyboard focus. It wraps the control in a
+    `display: contents` span and sets `aria-describedby` on it.
+  - Keys are ignored while typing or in a select.
+- **Performance.** One **vision process** (`visionWorker.ts`, a
+  `utilityProcess`) now runs frame detection, shape finding and SAM; main
+  only decodes images. onnxruntime loads only when SAM is first used.
+  - "Find more" filters SAM's answers inside the worker, so only the
+    useful masks cross over.
+  - With the detailed finder installed, SAM starts reading the photo as
+    soon as shapes are found. A box joins that read rather than starting
+    a second one.
+  - The scan is freed when the dialog closes.
+- **Code.**
+  - `ScanDialog` (680 lines) is split into a shared dialog frame and
+    `ShapesStep`, which owns the picker's state, undo and keys.
+  - Validators shared in `ipc/validate.ts`; `vision.ts` holds the one
+    client and the model path.
+  - Undo history no longer updates inside a state updater, which
+    StrictMode runs twice.
+
+**Considered.**
+- Chat bubbles on the phone (reads like a messaging app), and a typing
+  effect (slows people down). Kept lines plus eyes.
+- A tool switcher (pick / draw / combine modes): gestures plus the
+  selection bar are fewer clicks.
+- Making combine permanent in main: keeping the parts makes undo
+  trivial.
+- `cloneElement` for tooltips: React 19's lint treats reading
+  `children.props` as possible ref access.
+
+**Verified by** `shapeDetect.test.ts`, which combines door halves into a
+quad, keeps separate pieces as rings, and refuses fewer than two known
+shapes. `e2e/scan.spec.ts` covers picking by key, the Combine tooltip
+showing C, C combines, Undo, ⌫ then ⌘Z, the ? list, and Esc closing only
+the list. The phone page was rendered at 390×844 through each state with
+no CSP errors.
+

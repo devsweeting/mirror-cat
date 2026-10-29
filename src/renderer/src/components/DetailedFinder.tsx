@@ -1,4 +1,5 @@
 import { formatMegabytes, type SamStatus } from '@shared/sam'
+import Tooltip from './Tooltip'
 
 interface DetailedFinderProps {
   status: SamStatus | null
@@ -24,11 +25,13 @@ export default function DetailedFinder({ status, busy, result, onFindMore }: Det
       {status.state === 'ready' ? (
         <>
           <p className="finder-text">
-            Finds curved and low-contrast shapes too. Boxes you draw use it.
+            Installed. Boxes you draw use it for exact outlines.
           </p>
-          <button type="button" className="btn btn-ghost finder-btn" onClick={onFindMore} disabled={busy}>
-            {busy ? 'Looking closer…' : 'Find more shapes'}
-          </button>
+          <Tooltip label="Look for curved and low-contrast shapes" keys={['F']}>
+            <button type="button" className="btn btn-ghost finder-btn" onClick={onFindMore} disabled={busy}>
+              {busy ? 'Looking closer…' : 'Find more shapes'}
+            </button>
+          </Tooltip>
           {busy && <p className="finder-text">Takes about 10 seconds.</p>}
           {!busy && result && (
             <p className="finder-text" role="status">

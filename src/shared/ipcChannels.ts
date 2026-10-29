@@ -52,6 +52,8 @@ export const IpcChannels = {
   CaptureFindMore: 'capture:find-more',
   /** Control window → main: the shape inside a box drawn on a fitted scan. */
   CaptureFindInBox: 'capture:find-in-box',
+  /** Control window → main: several found shapes as one new shape. */
+  CaptureCombineShapes: 'capture:combine-shapes',
   /** Control window → main: is the detailed finder's model here? */
   SamStatus: 'sam:status',
   /** Control window → main: download the detailed finder's model (resolves when done). */
