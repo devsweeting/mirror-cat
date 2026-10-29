@@ -56,7 +56,18 @@ const media = {
 
 /** Surface masks: the renderer makes the PNG, main stores it and returns its id. */
 const masks = {
-  save: (png: Uint8Array): Promise<string> => ipcRenderer.invoke(IpcChannels.MaskSave, png)
+  save: (png: Uint8Array): Promise<string> => ipcRenderer.invoke(IpcChannels.MaskSave, png),
+
+  /** OS file picker for a mask image; null if cancelled. */
+  pickImage: (): Promise<{ name: string; bytes: Uint8Array } | null> =>
+    ipcRenderer.invoke(IpcChannels.MaskPickImage),
+
+  /** Edit ▸ Edit Mask (⇧⌘M). */
+  onToggleEdit: (callback: () => void): (() => void) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(IpcChannels.MaskToggleEdit, listener)
+    return () => ipcRenderer.removeListener(IpcChannels.MaskToggleEdit, listener)
+  }
 }
 
 /**

@@ -100,6 +100,12 @@ const GRID_FRAGMENT_SHADER = /* glsl */ `
  * edge. Decoding it gives a distance in "fraction of the shorter side",
  * which grow shifts and feather softens. With no feather the edge is
  * antialiased to about a pixel via fwidth().
+ *
+ * Preview (editor, selected surface only): instead of vanishing, hidden
+ * areas stay faintly visible behind diagonal hatching -- still multiplying,
+ * just by a striped 0.16/0.42 rather than 0 -- so you can see what you've
+ * hidden and aim when bringing light back. The projector never previews:
+ * there, hidden means unlit.
  */
 const MASK_FRAGMENT_SHADER = /* glsl */ `
   uniform sampler2D uMask;
@@ -107,6 +113,8 @@ const MASK_FRAGMENT_SHADER = /* glsl */ `
   uniform float uGrow;
   uniform float uFeather;
   uniform float uInvert;
+  uniform float uPreview;
+  uniform float uPixelRatio;
   varying vec2 vUv;
 
   void main() {
@@ -116,6 +124,11 @@ const MASK_FRAGMENT_SHADER = /* glsl */ `
     d = mix(d, -d, uInvert) + uGrow;
     float edge = max(uFeather * 0.5, fwidth(d) * 0.75);
     float m = smoothstep(-edge, edge, d);
+    if (uPreview > 0.5) {
+      float stripe = fract((gl_FragCoord.x + gl_FragCoord.y) / (10.0 * uPixelRatio));
+      float hidden = mix(0.16, 0.42, step(stripe, 0.28));
+      m = mix(hidden, 1.0, m);
+    }
     gl_FragColor = vec4(0.0, 0.0, 0.0, m);
   }
 `
@@ -254,7 +267,9 @@ export class ProjectionEngine {
         uRange: { value: MASK_FIELD_RANGE },
         uGrow: { value: 0 },
         uFeather: { value: 0 },
-        uInvert: { value: 0 }
+        uInvert: { value: 0 },
+        uPreview: { value: 0 },
+        uPixelRatio: { value: this.renderer.getPixelRatio() }
       },
       transparent: true,
       depthTest: false,
@@ -369,6 +384,12 @@ export class ProjectionEngine {
   /** Redraw after a shared mask texture (the paint canvas) changed. */
   maskTextureChanged(): void {
     if (this.maskTexture) this.maskTexture.needsUpdate = true
+    this.requestRender()
+  }
+
+  /** Editor only: show hidden areas dimmed and hatched instead of gone. */
+  setMaskPreview(preview: boolean): void {
+    this.maskMaterial.uniforms.uPreview.value = preview ? 1 : 0
     this.requestRender()
   }
 

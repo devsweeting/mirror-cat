@@ -433,3 +433,31 @@ mask editor (loses "paint while you watch the wall").
 `main/persistence/sceneAutosave.test.ts`, and `e2e/mask.spec.ts` (paint,
 save, invert/feather, remove, Esc).
 
+## 025 Mask mode: outline first, hidden areas visible, one place to finish
+*2026-10-28 · Accepted*
+
+**Context.** The first mask UI (decision 024) worked but felt clunky: a row
+of drawer buttons, hidden areas indistinguishable from the black frame,
+masking an object meant brushing away everything around it, and a toolbar
+that pushed the stage down.
+
+**Decision.** A "mask mode" (M / ⇧⌘M / the drawer's mask well) whose bar
+replaces the prompt bar in place. Outline (polygon) is the default tool for
+new masks, and the first light outline isolates the shape; Brush is for
+touch-ups; one Light / Dark switch for both. The editor previews hidden
+areas as dimmed hatching on the selected surface (projector stays black).
+The drawer is one well (click to edit, drop an image), an Edge slider, and
+a "…" popover for invert / grow / replace / remove. Cut-out images get a
+one-time "Light only the image" offer. Mask images come in through the
+native file dialog.
+
+**Considered.** A floating toolbar over the frame (covers what you're
+editing); keeping the toolbar above the frame (layout jump); a bare M menu
+accelerator (would eat "m" in text fields, so the menu uses ⇧⌘M and the
+bare key is handled in the page); live projector updates per pointer move
+over a MessagePort (deferred -- the next step).
+
+**Verified by** `e2e/mask.spec.ts` (outline + brush + undo, options, M/Esc,
+drop + relaunch, cut-out offer) and the `outlineToContent` /
+`dedupeOutline` cases in `shared/warpPick.test.ts`.
+

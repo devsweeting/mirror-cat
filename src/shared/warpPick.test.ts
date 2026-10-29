@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { CornerSet, EdgeNodeSet, WarpMode } from './types'
 import { applyHomography, squareToQuad, writeWarpGrid } from './surfaceGeometry'
-import { WARP_SEGMENTS, pickWarpGrid } from './warpPick'
+import { WARP_SEGMENTS, dedupeOutline, outlineToContent, pickWarpGrid } from './warpPick'
 
 const NO_NODES: EdgeNodeSet = [[], [], [], []]
 const W = 800
@@ -83,5 +83,47 @@ describe('pickWarpGrid', () => {
       { x: 0.5, y: 0.5 }
     ]
     expect(pickWarpGrid(grid(point, 'bilinear'), WARP_SEGMENTS, 400, 300)).toBeNull()
+  })
+})
+
+describe('outlineToContent', () => {
+  it('maps a screen outline into content space, following the warp', () => {
+    const m = squareToQuad(ANGLED)!
+    const corners = [
+      [0.25, 0.25],
+      [0.75, 0.25],
+      [0.75, 0.75],
+      [0.25, 0.75]
+    ].map(([u, v]) => {
+      const p = applyHomography(m, u, v)
+      return { x: p.x * W, y: p.y * H }
+    })
+    const uv = outlineToContent(corners, grid(ANGLED, 'perspective'), WARP_SEGMENTS)
+    expect(uv.length).toBeGreaterThan(4) // edges were subdivided
+    for (const p of uv) {
+      expect(p.u).toBeGreaterThan(0.24)
+      expect(p.u).toBeLessThan(0.76)
+      expect(p.v).toBeGreaterThan(0.24)
+      expect(p.v).toBeLessThan(0.76)
+    }
+    expect(uv[0].u).toBeCloseTo(0.25, 2)
+    expect(uv[0].v).toBeCloseTo(0.25, 2)
+  })
+})
+
+describe('dedupeOutline', () => {
+  it('drops the double point a double-click leaves, and a closing duplicate', () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 50, y: 0 },
+      { x: 50, y: 50 },
+      { x: 50.5, y: 50.5 },
+      { x: 1, y: 1 }
+    ]
+    expect(dedupeOutline(pts)).toEqual([
+      { x: 0, y: 0 },
+      { x: 50, y: 0 },
+      { x: 50, y: 50 }
+    ])
   })
 })

@@ -104,3 +104,48 @@ export function pickWarpGrid(
   }
   return best
 }
+
+/**
+ * Map a closed outline drawn on screen (pixel points, in order) into the
+ * surface's content space. Each edge is subdivided every `step` pixels
+ * before mapping: under a perspective warp straight lines stay straight in
+ * content space, but under the even warp or with edge nodes they bend, and
+ * the samples follow the bend so the filled shape lands where it was drawn.
+ */
+export function outlineToContent(
+  points: readonly { x: number; y: number }[],
+  positions: ArrayLike<number>,
+  segments: number,
+  step = 6
+): { u: number; v: number }[] {
+  const out: { u: number; v: number }[] = []
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i]
+    const b = points[(i + 1) % points.length]
+    const count = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / step))
+    for (let k = 0; k < count; k++) {
+      const t = k / count
+      const pick = pickWarpGrid(positions, segments, a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+      if (pick) out.push({ u: pick.u, v: pick.v })
+    }
+  }
+  return out
+}
+
+/** Drop consecutive points closer than `minGap` pixels (double-clicks add two). */
+export function dedupeOutline(
+  points: readonly { x: number; y: number }[],
+  minGap = 4
+): { x: number; y: number }[] {
+  const out: { x: number; y: number }[] = []
+  for (const p of points) {
+    const last = out[out.length - 1]
+    if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= minGap) out.push(p)
+  }
+  if (out.length > 1) {
+    const first = out[0]
+    const last = out[out.length - 1]
+    if (Math.hypot(first.x - last.x, first.y - last.y) < minGap) out.pop()
+  }
+  return out
+}

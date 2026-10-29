@@ -28,6 +28,10 @@ export interface MirrorCatMediaApi {
 export interface MirrorCatMasksApi {
   /** Store a mask PNG (made in the renderer); resolves with its id. */
   save(png: Uint8Array): Promise<string>
+  /** OS file picker for a mask image; resolves null if cancelled. */
+  pickImage(): Promise<{ name: string; bytes: Uint8Array } | null>
+  /** Edit ▸ Edit Mask (⇧⌘M) was chosen. */
+  onToggleEdit(callback: () => void): () => void
 }
 
 export interface MirrorCatAiApi {

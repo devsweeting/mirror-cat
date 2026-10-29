@@ -194,24 +194,42 @@ feather width (at least about a pixel, via `fwidth`, so a crisp edge is
 still antialiased). The sliders are uniforms: no recomputation. Fields are
 cached by id.
 
-**Painting.** Paint draws directly on the stage, over the warped surface,
-so you can watch the wall while you paint. The pointer is mapped back into
-content space by `pickWarpGrid` (`shared/warpPick.ts`), which inverts the
-very mesh the engine draws (barycentric lookup over its triangles), so it's
-exact in every warp mode, edge nodes included. Each stamp is drawn as the
-ellipse that the warp turns back into a circle on screen: the canvas
-transform is diag(W, H)·J⁻¹, with J the local stretch from the pick. While
-a session is open, the editor uses the paint canvas itself as the mask
-(a plain black/white image is a valid field in the same encoding), and
-350 ms after each stroke it's saved and set on the surface, which updates
-the projector and the autosave. Undo/redo (⌘Z / ⇧⌘Z) step strokes while
-painting (12 levels). Painting ends with Done, Esc/Enter, selecting another
-surface, or hiding/deleting this one; unsaved strokes are saved first.
+**Mask mode** (M, Edit ▸ Edit Mask ⇧⌘M, or click the mask well in the
+drawer). The mask bar takes the prompt bar's slot under the stage, so
+nothing moves; the selected surface's handles step aside. Two tools share
+one Light / Dark switch (X):
 
-**Uploading.** Any PNG/JPEG/WebP becomes a mask in the renderer
+- **Outline** (O, the default for a new mask): click points around a shape;
+  close by double-clicking, clicking the first point, or Enter. Backspace
+  drops a point, Esc cancels. The first *light* outline on a fully lit
+  surface darkens everything else ("light only this"); later outlines add
+  to or cut from the lit area. Each edge is subdivided and mapped through
+  the drawn mesh (`outlineToContent`), so the shape lands where it was drawn
+  under any warp.
+- **Brush** (B): drag to paint; `[` `]` size. Each stamp is drawn as the
+  ellipse that the warp turns back into a circle on screen (canvas
+  transform diag(W, H)·J⁻¹, J from `pickWarpGrid`).
+
+**Seeing what's hidden.** In the editor, the selected surface previews its
+mask: hidden areas stay faintly visible behind diagonal hatching (the mask
+pass multiplies by a striped 0.16/0.42 instead of 0) so you can aim when
+bringing light back. The projector never previews -- hidden is unlit.
+
+While mask mode is open the editor uses the working canvas itself as the
+mask; 350 ms after each change it's saved and set on the surface (projector
++ autosave). ⌘Z / ⇧⌘Z step outline points and mask edits (12 levels).
+Mask mode ends with Done, Esc, M, selecting another surface, or hiding /
+deleting this one; unsaved changes are saved first.
+
+**Drawer.** One well (the mask thumbnail; click to edit, drop an image on
+it), one Edge (softness) slider, and "…" for invert, grow, replace with an
+image (native file dialog via `mask:pick-image`) and remove. When the
+surface's picture has a transparent background, the drawer offers "Light
+only the image" once.
+
+**Images as masks.** Any PNG/JPEG/WebP becomes a mask in the renderer
 (`imageToMaskPng`): images with transparency use their alpha (cut-outs,
 like a photo with the background removed), opaque ones their brightness.
-"From image" does the same with the surface's own picture.
 
 **Limits.** Grow/feather units follow the mask's shorter side, so on a
 surface stretched far from the mask's proportions they're slightly

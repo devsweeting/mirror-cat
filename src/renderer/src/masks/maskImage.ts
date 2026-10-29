@@ -6,6 +6,7 @@ import {
   maskGrayFromRgba,
   maskUrl
 } from '@shared/mask'
+import { mediaUrl } from '@shared/media'
 
 export interface MaskField {
   data: Uint8Array
@@ -137,4 +138,30 @@ function drawToPixels(source: CanvasImageSource, width: number, height: number):
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(source, 0, 0, width, height)
   return ctx.getImageData(0, 0, width, height).data
+}
+
+const transparencyCache = new Map<string, Promise<boolean>>()
+
+/**
+ * Whether a library image has a meaningful transparent area (a cut-out),
+ * checked on a small copy. Cached by asset id -- ids are content hashes.
+ * Formats that can't carry alpha answer false without loading.
+ */
+export function imageHasTransparency(id: string, mimeType: string): Promise<boolean> {
+  if (!/png|webp|gif/.test(mimeType)) return Promise.resolve(false)
+  let cached = transparencyCache.get(id)
+  if (!cached) {
+    cached = loadImage(mediaUrl(id))
+      .then((image) => {
+        const { width, height } = fieldSize(image.naturalWidth, image.naturalHeight, 128)
+        const rgba = drawToPixels(image, width, height)
+        let clear = 0
+        for (let i = 3; i < rgba.length; i += 4) if (rgba[i] < 128) clear++
+        // At least 2% transparent: a cut-out, not a stray edge pixel.
+        return clear > (rgba.length / 4) * 0.02
+      })
+      .catch(() => false)
+    transparencyCache.set(id, cached)
+  }
+  return cached
 }

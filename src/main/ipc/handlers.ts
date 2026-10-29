@@ -1,5 +1,6 @@
 import { BrowserWindow, dialog, ipcMain, screen } from 'electron'
-import { isAbsolute } from 'path'
+import { basename, isAbsolute } from 'path'
+import { promises as fs } from 'fs'
 import { IpcChannels } from '../../shared/ipcChannels'
 import type { SceneState, Surface } from '../../shared/types'
 import {
@@ -22,6 +23,7 @@ import { fromControlWindow, requireControlWindow } from './trust'
 /** Upper bound on one drag-and-drop batch, so a stray folder drop can't stall main. */
 const MAX_IMPORT_BATCH = 100
 const MAX_PROMPT_LENGTH = 4000
+const MAX_MASK_SOURCE_BYTES = 50 * 1024 * 1024
 
 interface HandlerDeps {
   library: MediaLibrary
@@ -169,6 +171,29 @@ export function registerIpcHandlers({
     requireControlWindow(event)
     if (!(bytes instanceof Uint8Array)) throw new Error('Expected mask PNG bytes')
     return masks.save(Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength))
+  })
+
+  // The OS picker, like media import, rather than a hidden <input type=file>:
+  // native look, remembers the last folder, and the page never sees a path.
+  // Main reads only the one file the user picked and hands back its bytes;
+  // the renderer turns them into a mask PNG.
+  ipcMain.handle(IpcChannels.MaskPickImage, async (event) => {
+    requireControlWindow(event)
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const options: Electron.OpenDialogOptions = {
+      title: 'Choose a mask image',
+      message: 'White or solid areas are lit; black or transparent areas stay dark.',
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+    }
+    const { canceled, filePaths } = parent
+      ? await dialog.showOpenDialog(parent, options)
+      : await dialog.showOpenDialog(options)
+    if (canceled || !filePaths[0]) return null
+    const path = filePaths[0]
+    const { size } = await fs.stat(path)
+    if (size > MAX_MASK_SOURCE_BYTES) throw new Error('That image is over 50 MB.')
+    return { name: basename(path), bytes: new Uint8Array(await fs.readFile(path)) }
   })
 
   library.onChange((assets) => {

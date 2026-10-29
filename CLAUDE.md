@@ -81,9 +81,13 @@ TypeScript + React + Three.js:
     decision 024): `Surface.mask` is a grayscale PNG in the surface's UV
     space in `userData/masks`, served as `mirrorcat-media://mask/<id>`,
     turned into a signed distance field in the renderer so grow/feather/
-    invert are uniforms. Painted on the stage (pointer mapped through the
-    drawn mesh by `pickWarpGrid`), uploaded, or cut from the surface
-    image's alpha. Unused masks are swept on launch.
+    invert are uniforms. Edited in "mask mode" (M, ⇧⌘M, or the drawer's
+    mask well): the mask bar replaces the prompt bar; Outline (polygon,
+    default) and Brush tools, mapped through the drawn mesh
+    (`pickWarpGrid`, `outlineToContent`); hidden areas preview hatched in
+    the editor only. Images become masks via drop / native dialog / the
+    surface image's alpha. Unused masks are swept on launch (decisions
+    024–025).
   - Settings › AI & animation (`components/settings/`, `main/ai/`,
     `shared/ai.ts`; docs/ai-settings.md): provider keys checked with a free
     request, encrypted with safeStorage in main, never returned to the

@@ -51,6 +51,11 @@ interface ProjectionCanvasProps {
    * its content above surfaces that are in front of it.
    */
   contentless?: boolean
+  /**
+   * Editor only: draw hidden (masked) areas dimmed and hatched rather than
+   * invisible, so you can see what the mask is doing. Never on the projector.
+   */
+  maskPreview?: boolean
   onCornersChange?: (corners: Surface['corners']) => void
   onEdgeNodesChange?: (edgeNodes: EdgeNodeSet) => void
 }
@@ -79,6 +84,7 @@ export default function ProjectionCanvas({
   editable = false,
   ghost = false,
   contentless = false,
+  maskPreview = false,
   onCornersChange,
   onEdgeNodesChange
 }: ProjectionCanvasProps) {
@@ -151,6 +157,10 @@ export default function ProjectionCanvas({
     mask: surface.mask,
     enabled: !contentless
   })
+
+  useEffect(() => {
+    engineRef.current?.setMaskPreview(maskPreview)
+  }, [maskPreview])
 
   // While this surface's mask is being painted, its handles step aside for
   // the brush (the shape can't change mid-paint).
