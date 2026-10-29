@@ -161,6 +161,81 @@ for contrast over bright media. Line widths use `fwidth()` so they stay
 constant in pixels however the surface is stretched. Content opacity
 doesn't affect it.
 
+## Masks
+
+`Surface.mask` keeps light off the parts of a surface you don't want lit:
+everything around an object, a window in a wall. It's the first step of
+"scan an object" (photo → background removed → masked surface), and it's
+useful on its own today.
+
+**Model.** A mask is a grayscale PNG in the surface's **content space** (u
+across, v down; white = lit), stored content-addressed in
+`userData/masks/<sha256>.png` by `main/masks/maskStore.ts` and served as
+`mirrorcat-media://mask/<id>`. The surface holds `{ id, invert, grow,
+feather }` (`shared/mask.ts`). Because the mask lives in UV space it moves
+and bends with the surface: nudge a corner after masking and the cut-out
+stays on the object. Masks are kept out of the media library (they aren't
+media you'd reuse, and painting saves a new one every few strokes); files
+no saved scene or backup refers to are swept on launch.
+
+**Rendering.** A third mesh shares the warped geometry, drawn after the
+content and before the grid. Its shader outputs only an alpha `m`, and its
+blend mode (`dst × srcAlpha` for color and alpha) multiplies whatever this
+surface has drawn so far by `m`. Each surface has its own canvas, so
+nothing else is affected, and the content material is untouched. The grid
+stays unmasked, so it still helps you line the whole surface up.
+
+**Grow / feather are free.** When a mask loads, the renderer turns it into
+a **signed distance field** (`encodeSignedDistanceField`, Felzenszwalb's
+linear-time transform, at ≤1024 px), stored as one byte per pixel with the
+edge at 128. The shader decodes the distance (as a fraction of the mask's
+shorter side), flips it for invert, adds grow and smoothsteps over the
+feather width (at least about a pixel, via `fwidth`, so a crisp edge is
+still antialiased). The sliders are uniforms: no recomputation. Fields are
+cached by id.
+
+**Mask mode** (M, Edit ▸ Edit Mask ⇧⌘M, or click the mask well in the
+drawer). The mask bar takes the prompt bar's slot under the stage, so
+nothing moves; the selected surface's handles step aside. Two tools share
+one Light / Dark switch (X):
+
+- **Outline** (O, the default for a new mask): click points around a shape;
+  close by double-clicking, clicking the first point, or Enter. Backspace
+  drops a point, Esc cancels. The first *light* outline on a fully lit
+  surface darkens everything else ("light only this"); later outlines add
+  to or cut from the lit area. Each edge is subdivided and mapped through
+  the drawn mesh (`outlineToContent`), so the shape lands where it was drawn
+  under any warp.
+- **Brush** (B): drag to paint; `[` `]` size. Each stamp is drawn as the
+  ellipse that the warp turns back into a circle on screen (canvas
+  transform diag(W, H)·J⁻¹, J from `pickWarpGrid`).
+
+**Seeing what's hidden.** In the editor, the selected surface previews its
+mask: hidden areas stay faintly visible behind diagonal hatching (the mask
+pass multiplies by a striped 0.16/0.42 instead of 0) so you can aim when
+bringing light back. The projector never previews -- hidden is unlit.
+
+While mask mode is open the editor uses the working canvas itself as the
+mask; 350 ms after each change it's saved and set on the surface (projector
++ autosave). ⌘Z / ⇧⌘Z step outline points and mask edits (12 levels).
+Mask mode ends with Done, Esc, M, selecting another surface, or hiding /
+deleting this one; unsaved changes are saved first.
+
+**Drawer.** One well (the mask thumbnail; click to edit, drop an image on
+it), one Edge (softness) slider, and "…" for invert, grow, replace with an
+image (native file dialog via `mask:pick-image`) and remove. When the
+surface's picture has a transparent background, the drawer offers "Light
+only the image" once.
+
+**Images as masks.** Any PNG/JPEG/WebP becomes a mask in the renderer
+(`imageToMaskPng`): images with transparency use their alpha (cut-outs,
+like a photo with the background removed), opaque ones their brightness.
+
+**Limits.** Grow/feather units follow the mask's shorter side, so on a
+surface stretched far from the mask's proportions they're slightly
+anisotropic. Mask changes aren't in undo history (like warp/grid). The
+projector updates per stroke, not per pointer move.
+
 ## The editor overlay
 
 On top of the WebGL canvas, `ProjectionCanvas` draws the editing UI in the

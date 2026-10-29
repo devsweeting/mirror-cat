@@ -1,12 +1,15 @@
 import * as THREE from 'three'
 import type { CornerSet, EdgeNodeSet, SurfaceFit, WarpMode } from '@shared/types'
 import { writeWarpGrid } from '@shared/surfaceGeometry'
+import { WARP_SEGMENTS } from '@shared/warpPick'
+import { MASK_FIELD_RANGE, type SurfaceMask } from '@shared/mask'
 
 // Subdivisions of the warped mesh. Higher = finer warp; edge nodes closer
 // together (in content space) than 1/SEGMENTS can't be fully resolved, so
 // this is sized well above the per-surface node limit. ~2.4k vertices per
-// surface -- trivial for any GPU from the last decade.
-const SEGMENTS = 48
+// surface -- trivial for any GPU from the last decade. Shared with mask
+// painting, which inverts this exact mesh.
+const SEGMENTS = WARP_SEGMENTS
 
 const ROWS = SEGMENTS + 1
 
@@ -86,6 +89,51 @@ const GRID_FRAGMENT_SHADER = /* glsl */ `
 `
 
 /**
+ * Surface mask, drawn on the same warped mesh between the content and the
+ * grid. It outputs only an alpha m, and its blend mode multiplies what's
+ * already in this surface's canvas (color *and* alpha) by m -- so masked
+ * areas become transparent in the editor and unlit on the projector, with
+ * no change to how the content itself is drawn. Each surface has its own
+ * canvas, so other surfaces are never touched.
+ *
+ * The texture is a signed distance field (see shared/mask.ts): 0.5 on the
+ * edge. Decoding it gives a distance in "fraction of the shorter side",
+ * which grow shifts and feather softens. With no feather the edge is
+ * antialiased to about a pixel via fwidth().
+ *
+ * Preview (editor, selected surface only): instead of vanishing, hidden
+ * areas stay faintly visible behind diagonal hatching -- still multiplying,
+ * just by a striped 0.16/0.42 rather than 0 -- so you can see what you've
+ * hidden and aim when bringing light back. The projector never previews:
+ * there, hidden means unlit.
+ */
+const MASK_FRAGMENT_SHADER = /* glsl */ `
+  uniform sampler2D uMask;
+  uniform float uRange;
+  uniform float uGrow;
+  uniform float uFeather;
+  uniform float uInvert;
+  uniform float uPreview;
+  uniform float uPixelRatio;
+  varying vec2 vUv;
+
+  void main() {
+    // Mask rows run top-down; the mesh's v is 1 at the top edge.
+    float s = texture2D(uMask, vec2(vUv.x, 1.0 - vUv.y)).r;
+    float d = (s - 0.5) * 2.0 * uRange;
+    d = mix(d, -d, uInvert) + uGrow;
+    float edge = max(uFeather * 0.5, fwidth(d) * 0.75);
+    float m = smoothstep(-edge, edge, d);
+    if (uPreview > 0.5) {
+      float stripe = fract((gl_FragCoord.x + gl_FragCoord.y) / (10.0 * uPixelRatio));
+      float hidden = mix(0.16, 0.42, step(stripe, 0.28));
+      m = mix(hidden, 1.0, m);
+    }
+    gl_FragColor = vec4(0.0, 0.0, 0.0, m);
+  }
+`
+
+/**
  * Builds the warp mesh: a SEGMENTS×SEGMENTS grid with regular UVs, whose
  * vertex positions come from writeWarpGrid (a Coons patch over the
  * surface's corners and edge nodes -- plain bilinear "quad warp" when
@@ -140,6 +188,12 @@ export class ProjectionEngine {
   private mesh: THREE.Mesh
   /** Shares `mesh`'s geometry; hidden unless the grid is switched on. */
   private gridMesh: THREE.Mesh
+  /** Shares `mesh`'s geometry; hidden unless the surface has a mask. */
+  private maskMesh: THREE.Mesh
+  private maskMaterial: THREE.ShaderMaterial
+  private maskTexture: THREE.Texture | null = null
+  /** The mask texture belongs to someone else (the paint canvas); don't dispose it. */
+  private maskTextureShared = false
   private warp: WarpMode
   private texture: THREE.Texture | null = null
   private fit: SurfaceFit = 'stretch'
@@ -205,6 +259,35 @@ export class ProjectionEngine {
       depthTest: false,
       depthWrite: false
     })
+    this.maskMaterial = new THREE.ShaderMaterial({
+      vertexShader: GRID_VERTEX_SHADER,
+      fragmentShader: MASK_FRAGMENT_SHADER,
+      uniforms: {
+        uMask: { value: null },
+        uRange: { value: MASK_FIELD_RANGE },
+        uGrow: { value: 0 },
+        uFeather: { value: 0 },
+        uInvert: { value: 0 },
+        uPreview: { value: 0 },
+        uPixelRatio: { value: this.renderer.getPixelRatio() }
+      },
+      transparent: true,
+      depthTest: false,
+      depthWrite: false,
+      // result = what's drawn so far × mask alpha, for color and alpha alike.
+      blending: THREE.CustomBlending,
+      blendEquation: THREE.AddEquation,
+      blendSrc: THREE.ZeroFactor,
+      blendDst: THREE.SrcAlphaFactor,
+      blendEquationAlpha: THREE.AddEquation,
+      blendSrcAlpha: THREE.ZeroFactor,
+      blendDstAlpha: THREE.SrcAlphaFactor
+    })
+    this.maskMesh = new THREE.Mesh(geometry, this.maskMaterial)
+    this.maskMesh.renderOrder = 0.5
+    this.maskMesh.visible = false
+    this.scene.add(this.maskMesh)
+
     this.gridMesh = new THREE.Mesh(geometry, gridMaterial)
     this.gridMesh.renderOrder = 1
     this.gridMesh.visible = false
@@ -248,6 +331,7 @@ export class ProjectionEngine {
     this.contextLost = false
     ;(this.mesh.geometry.getAttribute('position') as THREE.BufferAttribute).needsUpdate = true
     if (this.texture) this.texture.needsUpdate = true
+    if (this.maskTexture) this.maskTexture.needsUpdate = true
     this.requestRender()
   }
 
@@ -277,6 +361,43 @@ export class ProjectionEngine {
   setGrid(visible: boolean): void {
     if (this.gridMesh.visible === visible) return
     this.gridMesh.visible = visible
+    this.requestRender()
+  }
+
+  /**
+   * Use `texture` (a signed distance field, or a plain black/white image)
+   * as this surface's mask, or null for none. The engine takes ownership
+   * and disposes it when replaced -- unless `shared` is set, for a texture
+   * someone else owns (the live canvas while painting).
+   */
+  setMaskTexture(texture: THREE.Texture | null, shared = false): void {
+    if (this.maskTexture && this.maskTexture !== texture && !this.maskTextureShared) {
+      this.maskTexture.dispose()
+    }
+    this.maskTexture = texture
+    this.maskTextureShared = shared
+    this.maskMaterial.uniforms.uMask.value = texture
+    this.maskMesh.visible = texture !== null
+    this.requestRender()
+  }
+
+  /** Redraw after a shared mask texture (the paint canvas) changed. */
+  maskTextureChanged(): void {
+    if (this.maskTexture) this.maskTexture.needsUpdate = true
+    this.requestRender()
+  }
+
+  /** Editor only: show hidden areas dimmed and hatched instead of gone. */
+  setMaskPreview(preview: boolean): void {
+    this.maskMaterial.uniforms.uPreview.value = preview ? 1 : 0
+    this.requestRender()
+  }
+
+  setMaskParams({ invert, grow, feather }: Omit<SurfaceMask, 'id'>): void {
+    const u = this.maskMaterial.uniforms
+    u.uInvert.value = invert ? 1 : 0
+    u.uGrow.value = grow
+    u.uFeather.value = feather
     this.requestRender()
   }
 
@@ -403,6 +524,9 @@ export class ProjectionEngine {
     this.mesh.geometry.dispose()
     ;(this.mesh.material as THREE.Material).dispose()
     ;(this.gridMesh.material as THREE.Material).dispose()
+    this.maskMaterial.dispose()
+    if (!this.maskTextureShared) this.maskTexture?.dispose()
+    this.maskTexture = null
     this.texture?.dispose()
     this.texture = null
     this.renderer.dispose()

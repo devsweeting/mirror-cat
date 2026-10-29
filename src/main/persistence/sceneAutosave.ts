@@ -10,6 +10,7 @@ import type {
 import { DEFAULT_OUTLINE_COLOR } from '../../shared/types'
 import { ASSET_ID_PATTERN } from '../../shared/media'
 import { MAX_EDGE_NODES } from '../../shared/surfaceGeometry'
+import { normalizeMask } from '../../shared/mask'
 import { isNotFound, quarantine, writeFileAtomic } from '../fsUtil'
 
 const FILE_VERSION = 1
@@ -71,6 +72,22 @@ export class SceneAutosave {
       return backup.surfaces
     }
     return null
+  }
+
+  /**
+   * Mask ids referenced by scene.json and scene.prev.json, so masks nothing
+   * points at can be swept on launch. Null when scene.json exists but can't
+   * be read -- then nothing is safe to delete.
+   */
+  async maskIdsInUse(): Promise<Set<string> | null> {
+    const ids = new Set<string>()
+    for (const path of [this.path, this.backupPath]) {
+      const result = await readScene(path)
+      if (result.kind === 'corrupt' && path === this.path) return null
+      if (result.kind !== 'ok') continue
+      for (const surface of result.surfaces) if (surface.mask) ids.add(surface.mask.id)
+    }
+    return ids
   }
 
   schedule(scene: SceneState): void {
@@ -180,7 +197,8 @@ export function normalizeSurface(value: unknown): Surface | null {
     // Scenes saved before warp modes existed were calibrated with the even
     // (bilinear) warp; keep them looking exactly as they did.
     warp: s.warp === 'perspective' ? 'perspective' : 'bilinear',
-    showGrid: s.showGrid === true
+    showGrid: s.showGrid === true,
+    mask: normalizeMask(s.mask)
   }
 }
 

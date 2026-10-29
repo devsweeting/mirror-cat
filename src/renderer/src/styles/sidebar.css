@@ -263,42 +263,6 @@
   color: var(--plaster);
 }
 
-.drawer-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 2px;
-  min-height: 28px;
-  margin-bottom: -6px;
-}
-
-.rename-input {
-  flex: 1;
-  min-width: 0;
-  height: 28px;
-}
-
-.delete-confirm {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px;
-  font-size: var(--text-sm);
-  color: var(--plaster);
-  background: color-mix(in srgb, var(--alert) 8%, var(--room));
-  border-radius: var(--radius-sm);
-}
-
-.delete-confirm-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.delete-confirm-actions .btn {
-  height: 26px;
-}
-
 .swatches {
   display: flex;
   flex-wrap: wrap;
@@ -593,4 +557,195 @@
 .content-menu button:disabled svg {
   color: var(--shade);
   cursor: default;
+}
+
+/* ---------- Drawer, simplified (decision 026) ----------
+   Everyday controls are always visible; set-once ones (name, color,
+   delete) live in the row's "…" menu, and warp / edge points fold into
+   "Shape". */
+
+.drawer-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Label, slider and value on one line. */
+.drawer-inline-slider .slider {
+  flex: 1;
+  min-width: 0;
+}
+
+.drawer-inline-slider .drawer-value {
+  min-width: 34px;
+  text-align: right;
+}
+
+.drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--seam);
+}
+
+.drawer-disclosure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% + 12px);
+  margin: -4px -6px;
+  padding: 4px 6px;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.drawer-disclosure:hover,
+.drawer-disclosure:focus-visible {
+  outline: none;
+  background: var(--wall-raised);
+}
+
+.drawer-disclosure-summary {
+  flex: 1;
+  text-align: right;
+  font-size: var(--text-sm);
+  color: var(--shade);
+}
+
+.drawer-disclosure-chevron {
+  flex-shrink: 0;
+  color: var(--shade);
+  transition: transform 0.15s var(--ease);
+}
+
+.drawer-disclosure[aria-expanded='true'] .drawer-disclosure-chevron {
+  transform: rotate(180deg);
+}
+
+.drawer-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drawer-section-body[hidden] {
+  display: none;
+}
+
+/* Row "…" menu: name, outline color, delete. Sits over the open row's
+   right end, left of its chevron; the row's name makes room for it. */
+.surface-menu {
+  position: absolute;
+  top: 6px;
+  right: 30px;
+  z-index: 2;
+}
+
+.surface-item.open > .surface-row .surface-name {
+  margin-right: 34px;
+}
+
+.surface-menu-button {
+  width: 28px;
+  height: 28px;
+  color: var(--dusk);
+}
+
+.surface-menu-button:hover,
+.surface-menu-button[aria-expanded='true'] {
+  color: var(--plaster);
+}
+
+.surface-menu-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: -26px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 236px;
+  padding: 12px;
+  background: var(--wall-raised);
+  border-radius: var(--radius-md);
+  box-shadow:
+    0 0 0 1px var(--seam),
+    0 12px 32px rgba(0, 0, 0, 0.45);
+  animation: content-menu-in 0.12s var(--ease);
+  cursor: default;
+}
+
+.surface-menu-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.surface-menu-field .field {
+  height: 30px;
+}
+
+.surface-menu-panel .swatch {
+  box-shadow: none;
+}
+
+.surface-menu-panel .swatch[aria-checked='true'],
+.surface-menu-panel .swatch.checked {
+  box-shadow:
+    0 0 0 2px var(--wall-raised),
+    0 0 0 3.5px var(--plaster);
+}
+
+.surface-menu-divider {
+  height: 1px;
+  margin: 0 -12px;
+  background: var(--seam);
+}
+
+.surface-menu-delete {
+  align-self: flex-start;
+  margin: -4px -6px;
+  padding: 4px 6px;
+  font-size: var(--text-sm);
+  color: var(--alert);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.surface-menu-delete:hover,
+.surface-menu-delete:focus-visible {
+  outline: none;
+  background: color-mix(in srgb, var(--alert) 12%, transparent);
+}
+
+.surface-menu-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.surface-menu-confirm-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.surface-menu-confirm-actions .btn {
+  height: 26px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer-disclosure-chevron,
+  .surface-menu-panel {
+    transition: none;
+    animation: none;
+  }
 }

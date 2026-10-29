@@ -7,6 +7,14 @@ import PromptPanel from './components/PromptPanel'
 import LibraryPanel from './components/LibraryPanel'
 import { LibraryIcon, SettingsIcon } from './components/icons'
 import SettingsPanel from './components/settings/SettingsPanel'
+import MaskPaintToolbar from './components/MaskPaintToolbar'
+import {
+  endMaskPaint,
+  redoPaint,
+  toggleMaskMode,
+  undoPaint,
+  useMaskPaint
+} from './state/maskPaint'
 import { useSceneStore } from './state/sceneStore'
 import {
   connectMediaLibrary,
@@ -55,6 +63,12 @@ export default function App() {
           (el instanceof HTMLElement && el.isContentEditable)
         if (typing) {
           document.execCommand(command)
+          return
+        }
+        // While painting a mask, undo/redo step brush strokes instead.
+        if (useMaskPaint.getState().surfaceId) {
+          if (command === 'undo') undoPaint()
+          else redoPaint()
           return
         }
         const changed = command === 'undo' ? undoShape() : redoShape()
@@ -159,6 +173,41 @@ export default function App() {
   const layerOrder = useMemo(() => surfaces.filter((s) => s.visible), [surfaces])
 
   const selectedSurface = surfaces.find((s) => s.id === effectiveSurfaceId) ?? null
+
+  // Painting follows the selection: selecting another surface, hiding or
+  // deleting this one finishes (and saves) the session.
+  const paintingSurfaceId = useMaskPaint((s) => s.surfaceId)
+  const paintingSelected = !!paintingSurfaceId && paintingSurfaceId === selectedSurface?.id
+  useEffect(() => {
+    if (paintingSurfaceId && (!paintingSelected || !selectedSurface?.visible)) void endMaskPaint()
+  }, [paintingSurfaceId, paintingSelected, selectedSurface?.visible])
+
+  // M on the stage, or Edit ▸ Edit Mask (⇧⌘M): mask mode on/off for the
+  // selected surface.
+  useEffect(() => {
+    const toggle = (): void => {
+      if (!useUiStore.getState().settingsOpen) toggleMaskMode(selectedSurface)
+    }
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key.toLowerCase() !== 'm' || event.metaKey || event.ctrlKey || event.altKey) return
+      const el = event.target
+      if (
+        el instanceof HTMLInputElement ||
+        el instanceof HTMLTextAreaElement ||
+        (el instanceof HTMLElement && el.isContentEditable)
+      ) {
+        return
+      }
+      event.preventDefault()
+      toggle()
+    }
+    window.addEventListener('keydown', onKey)
+    const offMenu = window.mirrorcat.masks.onToggleEdit(toggle)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      offMenu()
+    }
+  }, [selectedSurface])
   const live = outputDisplayId !== null
 
   return (
@@ -230,6 +279,7 @@ export default function App() {
                       surface={surface}
                       media={surfaceMedia(surface.assetId, assets)}
                       ghost={!isSelected}
+                      maskPreview={isSelected}
                     />
                   </div>
                 )
@@ -277,7 +327,15 @@ export default function App() {
             </span>
             {live && <span className="frame-live">Live on the projector</span>}
           </p>
-          <PromptPanel surface={selectedSurface} />
+          {/* Mask mode takes the prompt bar's place, so nothing moves. */}
+          {paintingSelected && selectedSurface ? (
+            <MaskPaintToolbar
+              surfaceName={selectedSurface.name}
+              surfaceColor={selectedSurface.outlineColor}
+            />
+          ) : (
+            <PromptPanel surface={selectedSurface} />
+          )}
         </main>
         {libraryOpen && <LibraryPanel targetSurfaceId={effectiveSurfaceId} />}
       </div>

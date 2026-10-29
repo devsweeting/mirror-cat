@@ -77,6 +77,14 @@ export function installAppMenu(): void {
             } satisfies MenuItemConstructorOptions
           ]),
       { type: 'separator' },
+      {
+        // Same as M on the stage. Shift+⌘M rather than a bare key here: a
+        // single-letter menu accelerator would eat that letter in text fields.
+        label: 'Edit Mask',
+        accelerator: 'Shift+CmdOrCtrl+M',
+        click: () => getControlWindow()?.webContents.send(IpcChannels.MaskToggleEdit)
+      },
+      { type: 'separator' },
       { role: 'cut' },
       { role: 'copy' },
       { role: 'paste' },

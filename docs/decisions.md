@@ -397,3 +397,111 @@ keys when encryption is unavailable (refused).
 **Verified by** `shared/ai.test.ts`, `main/ai/keyStore.test.ts`,
 `main/ai/keyCheck.test.ts` and `e2e/settings.spec.ts` (save, reject,
 offline, defaults persisted, key never visible to the page or on disk).
+
+## 024 Surface masks: UV-space images, distance fields, painted on the stage
+*2026-10-28 · Accepted*
+
+**Context.** "Scan an object" (photo → background removed → surface that
+fits the object) needs surfaces that light an arbitrary shape, not just a
+quad. That primitive is useful on its own first.
+
+**Decision.** `Surface.mask = { id, invert, grow, feather } | null`. The
+mask is a grayscale PNG in the surface's content (UV) space, stored
+content-addressed in `userData/masks` (not the media library) and swept on
+launch when unused. The renderer turns it into a signed distance field so
+grow/feather/invert are shader uniforms. A mask mesh multiplies the
+surface's own canvas by the mask. Masks are painted directly on the stage
+(the pointer is mapped through the drawn mesh), uploaded, or taken from
+the surface image's transparency. Long form:
+`docs/surfaces-and-warping.md` → "Masks".
+
+**Why.** UV space means the mask follows the surface when corners are
+nudged, which is what calibration needs. Distance fields make the sliders
+instant and the edge antialiased at any size. Painting on the stage means
+you can paint while watching the wall.
+
+**Considered.** A polygon outline instead of an image (precise, but bad at
+organic shapes and what segmentation produces is a bitmap anyway); a mask
+in projector space (wouldn't follow corner edits); masks as library assets
+(floods the Library while painting); patching `MeshBasicMaterial` via
+`onBeforeCompile` (fragile across Three.js versions); grow/feather by
+re-blurring the image on the CPU (slow per slider move); a separate flat
+mask editor (loses "paint while you watch the wall").
+
+**Verified by** `shared/mask.test.ts`, `shared/warpPick.test.ts`,
+`main/masks/maskStore.test.ts`, the mask cases in
+`main/persistence/sceneAutosave.test.ts`, and `e2e/mask.spec.ts` (paint,
+save, invert/feather, remove, Esc).
+
+## 025 Mask mode: outline first, hidden areas visible, one place to finish
+*2026-10-28 · Accepted*
+
+**Context.** The first mask UI (decision 024) worked but felt clunky: a row
+of drawer buttons, hidden areas indistinguishable from the black frame,
+masking an object meant brushing away everything around it, and a toolbar
+that pushed the stage down.
+
+**Decision.** A "mask mode" (M / ⇧⌘M / the drawer's mask well) whose bar
+replaces the prompt bar in place. Outline (polygon) is the default tool for
+new masks, and the first light outline isolates the shape; Brush is for
+touch-ups; one Light / Dark switch for both. The editor previews hidden
+areas as dimmed hatching on the selected surface (projector stays black).
+The drawer is one well (click to edit, drop an image), an Edge slider, and
+a "…" popover for invert / grow / replace / remove. Cut-out images get a
+one-time "Light only the image" offer. Mask images come in through the
+native file dialog.
+
+**Considered.** A floating toolbar over the frame (covers what you're
+editing); keeping the toolbar above the frame (layout jump); a bare M menu
+accelerator (would eat "m" in text fields, so the menu uses ⇧⌘M and the
+bare key is handled in the page); live projector updates per pointer move
+over a MessagePort (deferred -- the next step).
+
+**Verified by** `e2e/mask.spec.ts` (outline + brush + undo, options, M/Esc,
+drop + relaunch, cut-out offer) and the `outlineToContent` /
+`dedupeOutline` cases in `shared/warpPick.test.ts`.
+
+## 026 Surface drawer: everyday controls first, set-once ones in the row menu
+*2026-10-28 · Accepted*
+
+**Context.** The drawer showed everything at once: a nine-swatch color
+strip, rename/delete icons on their own row, opacity on two lines, warp
+mode and an edge-point stepper -- most of which you set once, if ever.
+
+**Decision.** The drawer is ordered by how often you reach for things:
+content, mask, grid, opacity (one line). Warp and edge points fold into a
+collapsed "Shape" section whose summary says the current state
+("Perspective, 4 points"); its open/closed state is remembered. The
+non-convex fallback note shows even when it's collapsed. Name, outline
+color and delete move to a "…" menu on the open surface's row
+(`SurfaceMenu`), outside the draggable row so its controls can't start a
+restack; the row's dot already shows the color.
+
+**Considered.** Hiding opacity too (it's used to dim content mid-session,
+so it stays); a full popover for all settings (hides the everyday ones);
+moving the color into the visibility dot (overloads a toggle).
+
+**Verified by** `e2e/drawer.spec.ts` (folded Shape, summary updates, row
+menu rename / recolor / delete) and `e2e/grid.spec.ts`.
+
+## 027 Mask settings in a dropdown; on/off settings are switches
+*2026-10-28 · Accepted*
+
+**Decision.** All mask settings fold into a "Mask" dropdown in the drawer,
+below Grid and Opacity and above Shape, with a summary header ("None",
+"On, inverted, soft 4.0%", "Editing on the stage"). It opens by itself
+while the mask is being edited and remembers its state. Inside: the well,
+Edge, Grow, Invert, and quiet text actions (use / replace with an image,
+light only the image, remove). The separate "…" options popover is gone.
+A cut-out suggestion or an error still shows while it's closed.
+
+On/off settings (Grid, Invert) use `ToggleSwitch`: it keeps the Off | On
+look but is a single `role="switch"` button, so clicking anywhere on it --
+including the side that's already active -- flips it, and the highlight
+slides across. Two-option choices with named values (Perspective / Even,
+Outline / Brush, Light / Dark, Fit) stay segmented radio groups, where
+clicking the active option should do nothing.
+
+**Verified by** `e2e/drawer.spec.ts` (switch flips from either half and
+with Space; mask summarized while folded) and `e2e/mask.spec.ts`.
+

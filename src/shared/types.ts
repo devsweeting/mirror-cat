@@ -1,3 +1,5 @@
+import type { SurfaceMask } from './mask'
+
 export interface DisplayInfo {
   id: number
   label: string
@@ -89,6 +91,11 @@ export interface Surface {
    * projector too -- seeing it on the real wall is the point.
    */
   showGrid: boolean
+  /**
+   * Hides the parts of the surface outside a shape (an object's outline),
+   * in the surface's own content space. See shared/mask.ts.
+   */
+  mask: SurfaceMask | null
 }
 
 /** The per-surface fields the settings drawer can edit. */
@@ -166,7 +173,8 @@ export function createSurface(
     opacity: 1,
     visible: true,
     warp: 'perspective',
-    showGrid: false
+    showGrid: false,
+    mask: null
   }
 }
 

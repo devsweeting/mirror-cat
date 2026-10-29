@@ -75,6 +75,19 @@ TypeScript + React + Three.js:
     (older saves). Perspective falls back to bilinear while the corners
     aren't convex. `Surface.showGrid` draws a UV-space alignment grid
     (shader in `ProjectionEngine.ts`) on the editor *and* the projector.
+  - Surface masks (`shared/mask.ts`, `shared/warpPick.ts`,
+    `main/masks/maskStore.ts`, `state/maskPaint.ts`,
+    `hooks/useSurfaceMask.ts`; docs/surfaces-and-warping.md → "Masks",
+    decision 024): `Surface.mask` is a grayscale PNG in the surface's UV
+    space in `userData/masks`, served as `mirrorcat-media://mask/<id>`,
+    turned into a signed distance field in the renderer so grow/feather/
+    invert are uniforms. Edited in "mask mode" (M, ⇧⌘M, or the drawer's
+    mask well): the mask bar replaces the prompt bar; Outline (polygon,
+    default) and Brush tools, mapped through the drawn mesh
+    (`pickWarpGrid`, `outlineToContent`); hidden areas preview hatched in
+    the editor only. Images become masks via drop / native dialog / the
+    surface image's alpha. Unused masks are swept on launch (decisions
+    024–025).
   - Settings › AI & animation (`components/settings/`, `main/ai/`,
     `shared/ai.ts`; docs/ai-settings.md): provider keys checked with a free
     request, encrypted with safeStorage in main, never returned to the
@@ -98,7 +111,12 @@ TypeScript + React + Three.js:
 
 - `npm install` -- first-time setup (also downloads Electron's binary,
   which needs a normal internet connection).
-- `npm run dev` -- electron-vite dev server with HMR.
+- `npm run dev` -- electron-vite dev server with HMR. Only the renderer
+  hot-reloads: after changing `src/main/`, `src/preload/` or `src/shared/`
+  code used by main, **restart `npm run dev`** (a stale preload/main means
+  new IPC is missing and new scene fields get dropped by the old
+  validator). Check `ps` for leftover dev sessions -- two running at once
+  share and fight over the same `scene.json`.
 - `npm run build` -- production bundle to `out/`.
 - `npm run typecheck` -- `tsc --noEmit` for both the node (main/preload)
   and web (renderer) TS projects.

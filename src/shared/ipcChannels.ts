@@ -24,6 +24,13 @@ export const IpcChannels = {
   /** Broadcast to every window with the full asset list whenever it changes. */
   MediaChanged: 'media:changed',
 
+  /** Control window → main: store a mask PNG, get its id back. */
+  MaskSave: 'mask:save',
+  /** Control window → main: native file dialog for a mask image; returns its bytes. */
+  MaskPickImage: 'mask:pick-image',
+  /** Main → control window: Edit ▸ Edit Mask (⇧⌘M) toggles mask mode. */
+  MaskToggleEdit: 'mask:toggle-edit',
+
   /** Main → control window: open Settings (app menu, ⌘,). */
   SettingsOpen: 'settings:open',
   AiGetState: 'ai:get-state',

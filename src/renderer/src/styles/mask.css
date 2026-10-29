@@ -1,0 +1,299 @@
+/* ---------- Surface masks ----------
+   Drawer: one well, one slider, options behind "…".
+   Stage: the mask layer (outline / brush).
+   Under the stage: the mask bar, in the prompt bar's slot. */
+
+/* The well: the mask itself, and the way in. Dashed while there's no mask
+   (an invitation), solid once there is. Doubles as a drop target. */
+.mask-well {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 10px 8px 8px;
+  text-align: left;
+  color: var(--plaster);
+  background: transparent;
+  border: 1px dashed var(--seam);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background-color 0.12s var(--ease),
+    border-color 0.12s var(--ease);
+}
+
+.mask-well.has-mask {
+  border-style: solid;
+}
+
+.mask-well:hover:not(:disabled),
+.mask-well:focus-visible {
+  outline: none;
+  background: var(--wall-raised);
+  border-color: color-mix(in srgb, var(--plaster) 25%, var(--seam));
+}
+
+.mask-well.editing {
+  border-style: solid;
+  border-color: var(--surface-color, var(--plaster));
+  background: color-mix(in srgb, var(--surface-color, var(--plaster)) 8%, transparent);
+}
+
+.mask-well.drop-over {
+  border-style: solid;
+  border-color: var(--plaster);
+  background: var(--wall-raised);
+}
+
+.mask-well:disabled {
+  cursor: default;
+  color: var(--shade);
+}
+
+.mask-well-thumb {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 34px;
+  color: var(--dusk);
+  background: #000;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.mask-well-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.mask-well-thumb img.inverted {
+  filter: invert(1);
+}
+
+.mask-well-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mask-well-title {
+  font-size: var(--text-md);
+}
+
+.mask-well-sub {
+  font-size: var(--text-sm);
+  color: var(--dusk);
+}
+
+/* Offered once when the surface's picture is a cut-out. */
+.mask-suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  background: var(--wall-raised);
+  border-radius: var(--radius-md);
+}
+
+.mask-suggestion-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.mask-suggestion-actions .btn {
+  padding: 4px 10px;
+  font-size: var(--text-sm);
+}
+
+
+.mask-error {
+  color: var(--alert);
+}
+
+/* ---------- Stage layer ---------- */
+
+.mask-paint-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.mask-paint-layer.tool-outline {
+  cursor: crosshair;
+}
+
+.mask-paint-layer.tool-brush {
+  cursor: none;
+}
+
+.mask-outline-draft {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.mask-outline-fill {
+  fill: color-mix(in srgb, var(--plaster) 10%, transparent);
+  stroke: none;
+}
+
+.op-dark .mask-outline-fill {
+  fill: rgba(0, 0, 0, 0.35);
+}
+
+.mask-outline-line {
+  fill: none;
+  stroke: var(--plaster);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+}
+
+.mask-outline-point {
+  fill: var(--plaster);
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 1;
+}
+
+.mask-outline-point.closing {
+  fill: var(--surface-color, var(--plaster));
+}
+
+/* Brush ring: dark halo plus a light line so it reads on any content.
+   Dashed while removing light, solid while adding it. */
+.mask-brush-cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--plaster);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.op-dark .mask-brush-cursor {
+  border-style: dashed;
+}
+
+/* ---------- Mask bar (in the prompt bar's slot) ---------- */
+
+.mask-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 8px 8px 10px;
+  background: var(--wall);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--surface-color, var(--plaster)) 40%, transparent),
+    0 18px 40px -18px rgba(0, 0, 0, 0.6);
+}
+
+.mask-bar .segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  font-size: var(--text-sm);
+}
+
+.mask-bar-size {
+  width: 96px;
+}
+
+.mask-bar-spacer {
+  flex: 1;
+}
+
+.mask-bar .btn {
+  padding: 6px 12px;
+  font-size: var(--text-sm);
+}
+
+.mask-bar-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 0 12px;
+  min-height: 18px;
+  font-size: var(--text-sm);
+  color: var(--dusk);
+}
+
+.mask-bar-hint.error {
+  color: var(--alert);
+}
+
+.mask-bar-saving {
+  color: var(--shade);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mask-well {
+    transition: none;
+  }
+}
+
+/* Actions at the bottom of the mask dropdown: quiet text buttons, since
+   they're rare and shouldn't compete with the well. */
+.mask-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
+
+.link-btn {
+  padding: 2px 0;
+  font-size: var(--text-sm);
+  color: var(--dusk);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.link-btn:hover:not(:disabled),
+.link-btn:focus-visible {
+  color: var(--plaster);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  outline: none;
+}
+
+.link-btn.danger:hover:not(:disabled),
+.link-btn.danger:focus-visible {
+  color: var(--alert);
+}
+
+.link-btn:disabled {
+  color: var(--shade);
+  cursor: default;
+}
+
+/* Image and remove as icons, with the help icon, at the row's end. */
+.mask-actions-icons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.icon-btn-danger:hover:not(:disabled),
+.icon-btn-danger:focus-visible {
+  color: var(--alert);
+}

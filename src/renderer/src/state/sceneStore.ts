@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { EdgeNodeSet, SceneState, Surface, SurfaceSettings } from '@shared/types'
 import { createSurface, nextSurfaceColor } from '@shared/types'
+import type { SurfaceMask } from '@shared/mask'
 
 interface SceneStore extends SceneState {
   /** Replace surfaces with ones loaded from the autosave (launch only). */
@@ -13,6 +14,10 @@ interface SceneStore extends SceneState {
   /** Clear an asset from every surface showing it (before deleting it from the library). */
   clearAssetEverywhere: (assetId: string) => void
   updateSurfaceSettings: (surfaceId: string, patch: Partial<SurfaceSettings>) => void
+  /** Set or clear a surface's mask. */
+  setSurfaceMask: (surfaceId: string, mask: SurfaceMask | null) => void
+  /** Change invert / grow / feather of an existing mask. */
+  updateSurfaceMask: (surfaceId: string, patch: Partial<Omit<SurfaceMask, 'id'>>) => void
   /** Restart a surface's video from the top, in the editor and on the projector. */
   replaySurface: (surfaceId: string) => void
   renameSurface: (surfaceId: string, name: string) => void
@@ -78,6 +83,20 @@ export const useSceneStore = create<SceneStore>((set) => ({
   updateSurfaceSettings: (surfaceId, patch) => {
     set((state) => ({
       surfaces: state.surfaces.map((s) => (s.id === surfaceId ? { ...s, ...patch } : s))
+    }))
+  },
+
+  setSurfaceMask: (surfaceId, mask) => {
+    set((state) => ({
+      surfaces: state.surfaces.map((s) => (s.id === surfaceId ? { ...s, mask } : s))
+    }))
+  },
+
+  updateSurfaceMask: (surfaceId, patch) => {
+    set((state) => ({
+      surfaces: state.surfaces.map((s) =>
+        s.id === surfaceId && s.mask ? { ...s, mask: { ...s.mask, ...patch } } : s
+      )
     }))
   },
 

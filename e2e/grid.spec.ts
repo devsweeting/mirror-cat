@@ -47,12 +47,15 @@ test('the drawer toggles the grid and explains a non-convex fallback', async () 
   const { page } = launched
   await page.locator('.surface-header', { hasText: 'Perspective' }).click()
   const drawer = page.locator('.surface-drawer')
-  const grid = drawer.getByRole('radiogroup', { name: 'Alignment grid' })
-  await grid.getByRole('radio', { name: 'Off' }).click()
-  await expect(grid.getByRole('radio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true')
-  await grid.getByRole('radio', { name: 'On' }).click()
-  await expect(grid.getByRole('radio', { name: 'On' })).toHaveAttribute('aria-checked', 'true')
+  const grid = drawer.getByRole('switch', { name: 'Alignment grid' })
+  await expect(grid).toHaveAttribute('aria-checked', 'true')
+  await grid.click()
+  await expect(grid).toHaveAttribute('aria-checked', 'false')
+  await grid.click()
+  await expect(grid).toHaveAttribute('aria-checked', 'true')
 
+  // Warp lives in the collapsed "Shape" section.
+  await drawer.getByRole('button', { name: /Shape/ }).click()
   const warp = drawer.getByRole('radiogroup', { name: 'Warp' })
   await expect(warp.getByRole('radio', { name: 'Perspective' })).toHaveAttribute(
     'aria-checked',

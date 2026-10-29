@@ -3,6 +3,7 @@ import { hasPreview, thumbnailUrl } from '@shared/media'
 import { useSceneStore } from '../state/sceneStore'
 import { useMediaStore } from '../state/mediaStore'
 import SurfaceSettingsDrawer from './SurfaceSettingsDrawer'
+import SurfaceMenu from './SurfaceMenu'
 
 interface SidebarProps {
   selectedSurfaceId: string | null
@@ -159,11 +160,13 @@ export default function Sidebar({ selectedSurfaceId, onSelectSurface }: SidebarP
                   <span className="chevron" aria-hidden="true" />
                 </button>
               </div>
+              {/* Name, color, delete: on the open row only. Outside the
+                  draggable row (and its button styles), overlaid on it. */}
+              {isOpen && <SurfaceMenu surface={surface} onRemove={() => removeSurface(surface.id)} />}
               <div id={drawerId} hidden={!isOpen}>
                 {isOpen && (
                   <SurfaceSettingsDrawer
                     surface={surface}
-                    onRemove={() => removeSurface(surface.id)}
                     onFocusSurface={() => onSelectSurface(surface.id)}
                   />
                 )}
