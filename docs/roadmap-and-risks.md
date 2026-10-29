@@ -22,8 +22,10 @@ will cause a real problem if left; "gap" means a missing feature.
 - **Scan an object (exploring).** Phone photo via QR → background
   removed → a masked surface that already lines up. Step 1, surface masks,
   has shipped ([decision 024](decisions.md#024-surface-masks-uv-space-images-distance-fields-painted-on-the-stage)).
-  Next: phone capture over the LAN (QR), tap-to-select segmentation (SAM 2
-  / BiRefNet, local), registration from projected ArUco markers. Later:
+  Step 2, phone capture over the LAN (QR), has shipped
+  ([phone-capture.md](phone-capture.md), decision 028). Next: registration
+  from projected ArUco markers, tap-to-select segmentation (SAM 2 /
+  BiRefNet, local). Later:
   Gray-code structured light for per-pixel fit on non-flat objects.
   Mask follow-ups: undo for mask changes, a "grid on masked area only"
   option, smoother brush (pressure, soft brush).

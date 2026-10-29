@@ -505,3 +505,105 @@ clicking the active option should do nothing.
 **Verified by** `e2e/drawer.spec.ts` (switch flips from either half and
 with Space; mask summarized while folded) and `e2e/mask.spec.ts`.
 
+## 028 Phone capture over the home network (Scan)
+*2026-10-28 · Accepted*
+
+**Context.** Scanning an object starts with a photo taken from beside the
+projector. Phones are the camera everyone has, but getting a photo from a
+phone into a desktop app usually means AirDrop, email or cables.
+
+**Decision.** A Scan dialog shows a QR code for a short-lived page served
+by the main process on the home network. The phone takes the photo with
+its own camera (file input with `capture`), re-encodes it to a JPEG of at
+most 4096 px, and posts it. The photo goes through the normal library
+import. The server listens on one LAN address and a random port, only
+while the dialog is open (10 minutes at most). It's token-gated, checks
+the Host header, and is size- and count-capped. Long form:
+`docs/phone-capture.md`.
+
+**Considered.**
+- A live viewfinder via `getUserMedia`: it needs HTTPS on the LAN, so a
+  self-signed certificate and browser warnings.
+- A cloud relay: it needs a backend and accounts, and the photo would
+  leave the house.
+- Binding to 0.0.0.0: it exposes more interfaces than needed.
+- Bluetooth or WebRTC: no simple phone-side story without an app.
+
+**Verified by** `main/capture/lanAddress.test.ts`,
+`main/capture/captureServer.test.ts` (token, Host check, upload limits,
+rejection, stop and expiry) and `e2e/scan.spec.ts` (phone page, upload,
+Put on surface, link closes with the dialog; refused upload).
+
+## 029 Scan lines up with the projector via projected markers
+*2026-10-28 · Accepted*
+
+**Context.** Devin asked whether the phone should show a box with the
+projector's aspect ratio to frame the photo. The goal is right: know
+exactly how the photo maps onto the projector. But the phone's own camera
+can't show an overlay from a web page (a live viewfinder needs HTTPS). A
+fixed rectangle would also only match from exactly the lens position;
+from anywhere else the frame appears as a slanted quadrilateral.
+
+**Decision.** The projector draws the box instead: while a scan waits, it
+shows a glowing frame with an ArUco marker in each corner. Main finds the
+markers in the photo (js-aruco2), fits a frame → photo homography through
+all marker corners, and the dialog shows the frame outlined for checking
+(corners draggable and arrow-nudgeable, missing ones highlighted). "Project
+onto the wall" makes a surface whose perspective warp is exactly the photo
+→ projector mapping.
+
+**Considered.** A phone-side guide box (no overlay over the native camera;
+inaccurate off-axis); a live viewfinder over HTTPS (certificate friction);
+OpenCV.js (8 MB, more than needed); tapping four corners only (kept as the
+fallback); detection in the renderer (js-aruco2 is CommonJS with a
+top-level `this`, which breaks in the browser bundle -- and main can decode
+with `nativeImage`).
+
+**Verified by** `main/capture/frameDetect.test.ts` (synthetic off-axis
+photos: all four markers within 6 px; one marker hidden, within 12 px and
+flagged estimated; no pattern → no corners; marker bits match the
+library), `shared/homography.test.ts`, and the live-scan case in
+`e2e/scan.spec.ts` (pattern on the projector, frame found at the expected
+spot, nudge, project, corners as predicted).
+
+## 030 Scans are fitted to the projector frame; nothing reaches past it
+*2026-10-28 · Accepted (supersedes the surface shape in 029)*
+
+**Context.** Devin's first real scan put the photo on a surface the size
+of the whole photo, with corners up to about twice outside the frame
+(e.g. (1.90, −1.24)). It lit the right pixels, but on the stage its
+outline ran off the edges and its corners couldn't be reached. Separately,
+the projector window had ended up on a different display (1920×1080) than
+the editor thought (the 1512×982 laptop screen), so the stage had the
+wrong shape.
+
+**Decision.**
+- "Project onto the wall" straightens the frame's part of the photo into
+  a frame-shaped image (`capture:rectify`, `main/capture/rectify.ts`) on
+  a surface that fills the frame exactly.
+- Any surface that reaches past the frame shows a note in its drawer,
+  with **Fit to the frame**. For an image it uses `frameInImage` to find
+  the frame's part of the image and straightens it; the mask is cleared
+  because it was drawn for the old layout. Otherwise it brings the corners
+  inside.
+- The stage never draws past its edge: outlines are clipped just outside
+  it, and corners beyond the frame are pinned to the edge, dashed. Dragging
+  one starts from there.
+- The projector window reports which display it's actually on
+  (`output:display-changed`), and the stage and picker follow it.
+
+**Considered.**
+- Clamping corners into the frame. That distorts the image.
+- Allowing corners far off-stage with scroll or zoom on the stage. A
+  bigger change, for a surface that can't be lit beyond the frame anyway.
+- Re-mapping the mask on Fit to the frame. Masks live in the mask store,
+  not the library; deferred, and the note says the mask is cleared.
+
+**Verified by** `main/capture/rectify.test.ts` (identity, crop,
+perspective undone, outside-photo black, non-convex refused),
+`frameInImage` / `reachesPastFrame` cases in `shared/homography.test.ts`,
+and `e2e/scan.spec.ts` (the scan surface fills the frame with a "(fit to
+projector)" image and re-projects the markers onto their own pixels;
+an oversized surface shows pinned corners and the note, and Fit to the
+frame fixes it).
+

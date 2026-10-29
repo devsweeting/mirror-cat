@@ -166,6 +166,9 @@
   width: 100%;
   height: 100%;
   overflow: visible;
+  /* Strokes on the frame edge stay whole, but a surface that reaches past
+     the frame can't draw over the rest of the editor. */
+  clip-path: inset(-4px);
   pointer-events: none;
   z-index: 1;
 }
@@ -416,4 +419,11 @@
   border-radius: 0;
   background: transparent;
   height: 100%;
+}
+
+/* A corner or edge point beyond the projector frame: pinned to the stage
+   edge, dashed. Grabbing it brings it onto the stage. */
+.corner-handle.offstage .corner-ring,
+.edge-node-handle.offstage .edge-node-ring {
+  border-style: dashed;
 }

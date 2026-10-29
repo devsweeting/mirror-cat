@@ -749,3 +749,23 @@
     animation: none;
   }
 }
+
+/* Something about this surface needs a decision (e.g. it reaches past the
+   projector frame). Amber like other "check this" cues. */
+.drawer-note {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--plaster);
+  background: color-mix(in srgb, var(--bulb) 10%, var(--wall));
+  border-radius: var(--radius-md);
+}
+
+.drawer-note .btn {
+  padding: 4px 10px;
+  font-size: var(--text-sm);
+}

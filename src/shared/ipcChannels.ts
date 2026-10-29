@@ -31,6 +31,22 @@ export const IpcChannels = {
   /** Main → control window: Edit ▸ Edit Mask (⇧⌘M) toggles mask mode. */
   MaskToggleEdit: 'mask:toggle-edit',
 
+  /** Control window → main: open a scan link (phone capture); returns the QR code. */
+  CaptureStart: 'capture:start',
+  CaptureStop: 'capture:stop',
+  /** Main → control window: the phone opened the page, sent a photo, etc. */
+  CaptureEvent: 'capture:event',
+  /** Control window → main: show or hide the scan pattern on the projector. */
+  CapturePattern: 'capture:pattern',
+  /** Main → output window: draw (or stop drawing) the scan pattern. */
+  CapturePatternShow: 'capture:pattern-show',
+  /** Control window → main: find the projector frame in a scan photo. */
+  CaptureDetectFrame: 'capture:detect-frame',
+  /** Control window → main: straighten the frame's part of an image into a frame-sized image. */
+  CaptureRectify: 'capture:rectify',
+  /** Main → control window: the projector window is now on a different display. */
+  OutputDisplayChanged: 'output:display-changed',
+
   /** Main → control window: open Settings (app menu, ⌘,). */
   SettingsOpen: 'settings:open',
   AiGetState: 'ai:get-state',

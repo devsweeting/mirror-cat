@@ -88,6 +88,20 @@ TypeScript + React + Three.js:
     the editor only. Images become masks via drop / native dialog / the
     surface image's alpha. Unused masks are swept on launch (decisions
     024–025).
+  - Scan / phone capture (`main/capture/`, `main/ipc/captureHandlers.ts`,
+    `components/ScanDialog.tsx`; docs/phone-capture.md, decision 028): a
+    QR code for a short-lived, token-gated page on the home network
+    (one LAN address, random port, open only while the dialog is). The
+    phone uploads a ≤4096 px JPEG into the library. Dev override:
+    MIRRORCAT_CAPTURE_HOST=127.0.0.1. When live, the projector shows a
+    scan pattern (glowing frame + ArUco markers, `shared/scanPattern.ts`);
+    main finds the frame (`main/capture/frameDetect.ts`, js-aruco2 --
+    CommonJS, import its default), the dialog lets you check corners,
+    and "Project onto the wall" straightens the frame's part of the photo
+    (`capture:rectify`, `main/capture/rectify.ts`) onto a surface that
+    fills the frame exactly (decisions 029–030). Surfaces never reach past
+    the frame in new flows; old ones get "Fit to the frame" in the drawer.
+    The projector window reports its real display (`output:display-changed`).
   - Settings › AI & animation (`components/settings/`, `main/ai/`,
     `shared/ai.ts`; docs/ai-settings.md): provider keys checked with a free
     request, encrypted with safeStorage in main, never returned to the

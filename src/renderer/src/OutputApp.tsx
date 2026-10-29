@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import ProjectionCanvas from './components/ProjectionCanvas'
+import ScanPattern from './components/ScanPattern'
 import type { SceneState } from '@shared/types'
 import { connectMediaLibrary, surfaceMedia, useMediaStore } from './state/mediaStore'
 
@@ -15,6 +16,9 @@ const EMPTY_SCENE: SceneState = { surfaces: [], outputDisplayId: null }
  */
 export default function OutputApp() {
   const [scene, setScene] = useState<SceneState>(EMPTY_SCENE)
+  // A scan is waiting for its photo: show the pattern over everything.
+  const [scanPattern, setScanPattern] = useState(false)
+  useEffect(() => window.mirrorcat.capture.onPattern(setScanPattern), [])
   const assets = useMediaStore((s) => s.assets)
   // Electron doesn't guarantee ordering between the requestSceneSync reply
   // and a live scene:update broadcast, so a live update that arrives first
@@ -42,6 +46,7 @@ export default function OutputApp() {
             <ProjectionCanvas surface={surface} media={surfaceMedia(surface.assetId, assets)} />
           </div>
         ))}
+      {scanPattern && <ScanPattern />}
     </div>
   )
 }
