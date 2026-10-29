@@ -318,14 +318,6 @@ export default function SurfaceMaskControls({ surface }: SurfaceMaskControlsProp
         )}
 
         <div className="mask-actions">
-          <button
-            type="button"
-            className="link-btn"
-            onClick={() => void chooseImage()}
-            disabled={busy || editing}
-          >
-            {mask ? 'Replace with an image…' : 'Use an image…'}
-          </button>
           {hasCutout && (
             <button
               type="button"
@@ -336,31 +328,81 @@ export default function SurfaceMaskControls({ surface }: SurfaceMaskControlsProp
               Light only the image
             </button>
           )}
-          {mask && (
+          <span className="mask-actions-icons">
             <button
               type="button"
-              className="link-btn danger"
-              onClick={() => setSurfaceMask(surface.id, null)}
+              className="icon-btn"
+              onClick={() => void chooseImage()}
               disabled={busy || editing}
+              aria-label={mask ? 'Replace with an image' : 'Use an image'}
+              title={mask ? 'Replace with an image…' : 'Use an image…'}
             >
-              Remove mask
+              {/* A picture with a swap arrow: use an image as the mask. */}
+              <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                <rect
+                  x="1.8"
+                  y="2.8"
+                  width="9.4"
+                  height="8"
+                  rx="1.4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                />
+                <path
+                  d="m2.6 9.6 2.6-2.6 2 2 1.2-1.2 2 2"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.2"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M13.8 7.2v4.6a2 2 0 0 1-2 2H7.4m1.6-1.6-1.6 1.6 1.6 1.6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
-          )}
-          <button
-            type="button"
-            className="info-button mask-help-button"
-            onClick={() => setShowHelp((v) => !v)}
-            aria-expanded={showHelp}
-            aria-controls={helpId}
-            aria-label="About masks"
-            title="About masks"
-          >
-            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-              <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
-              <circle cx="8" cy="5" r="0.9" fill="currentColor" />
-              <path d="M8 7.3v4.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-            </svg>
-          </button>
+            {mask && (
+              <button
+                type="button"
+                className="icon-btn icon-btn-danger"
+                onClick={() => setSurfaceMask(surface.id, null)}
+                disabled={busy || editing}
+                aria-label="Remove mask"
+                title="Remove mask"
+              >
+                <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                  <path
+                    d="M2.5 4.2h11M6.2 4.2V2.6h3.6v1.6M3.9 4.2l.7 9.2h6.8l.7-9.2M6.6 6.6v4.5M9.4 6.6v4.5"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            )}
+            <button
+              type="button"
+              className="info-button"
+              onClick={() => setShowHelp((v) => !v)}
+              aria-expanded={showHelp}
+              aria-controls={helpId}
+              aria-label="About masks"
+              title="About masks"
+            >
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.3" />
+                <circle cx="8" cy="5" r="0.9" fill="currentColor" />
+                <path d="M8 7.3v4.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+            </button>
+          </span>
         </div>
 
         <div id={helpId} className="drawer-help" hidden={!showHelp}>
