@@ -1,4 +1,4 @@
-import type { DisplayInfo, EditCommand, SceneState, Surface } from '../shared/types'
+import type { CornerSet, DisplayInfo, EditCommand, SceneState, Surface } from '../shared/types'
 import type {
   GeneratedImageImport,
   MediaAsset,
@@ -44,6 +44,12 @@ export interface MirrorCatCaptureApi {
   setPattern(on: boolean): Promise<boolean>
   /** Where the projector frame is in a scan photo (needs the projector open). */
   detectFrame(assetId: string): Promise<FrameDetection>
+  /** Straighten the part of an image inside `corners` into a frame-shaped library image. */
+  rectify(
+    assetId: string,
+    corners: CornerSet,
+    frame?: { width: number; height: number }
+  ): Promise<MediaAsset>
   /** Projector window: draw the scan pattern or not. */
   onPattern(callback: (on: boolean) => void): () => void
 }
@@ -62,6 +68,7 @@ export interface MirrorCatApi {
   openOutputWindow(displayId: number): Promise<boolean>
   closeOutputWindow(): Promise<boolean>
   onOutputClosed(callback: () => void): () => void
+  onOutputDisplayChanged(callback: (displayId: number) => void): () => void
   sendSceneUpdate(scene: SceneState): void
   onSceneUpdate(callback: (scene: SceneState) => void): () => void
   requestSceneSync(): Promise<SceneState | null>

@@ -40,13 +40,21 @@ When the photo arrives:
 2. **Check it.** The dialog shows the photo with the frame outlined
    (`FrameCornersEditor`). Drag a corner, or use the arrow keys (Shift for
    bigger steps), to fix it. If nothing was found you start from a guess.
-3. **Project onto the wall.** This makes a "Scan" surface whose corners are
-   the photo's own corners mapped into the frame (`photoSurfaceCorners`:
-   the inverse of the unit-square → frame-in-photo homography). Its
-   perspective warp reproduces that mapping exactly, so every photo pixel
-   lands on the projector pixel that lit it. The objects light up with
-   their own image, which is the accuracy check, and you can outline an
-   object in mask mode right over its photo.
+3. **Project onto the wall.** Main straightens the frame's part of the
+   photo into an image the projector's shape (`main/capture/rectify.ts`,
+   `capture:rectify`: per output pixel, the unit-square → frame-in-photo
+   homography gives the photo point, sampled bilinearly) and saves it as
+   "<photo> (fit to projector)". A new "Scan" surface fills the frame
+   exactly (corners 0..1) and shows it, so every pixel lands on the
+   projector pixel that lit it. The objects light up with their own
+   image, which is the accuracy check, and you can outline an object in
+   mask mode right over its photo. The surface never reaches past the
+   projector's area: nothing outside the frame can be lit anyway, and its
+   corners stay on the stage.
+
+   *First version (replaced):* a surface the size of the whole photo,
+   corners far outside the frame. It lit the same pixels, but its outline
+   and corners ran off the stage (decision 030).
 
 Not live: no pattern, and the photo can go on a surface as-is.
 

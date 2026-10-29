@@ -566,3 +566,44 @@ library), `shared/homography.test.ts`, and the live-scan case in
 `e2e/scan.spec.ts` (pattern on the projector, frame found at the expected
 spot, nudge, project, corners as predicted).
 
+## 030 Scans are fitted to the projector frame; nothing reaches past it
+*2026-10-28 · Accepted (supersedes the surface shape in 029)*
+
+**Context.** Devin's first real scan put the photo on a surface the size
+of the whole photo, with corners up to about twice outside the frame
+(e.g. (1.90, −1.24)). It lit the right pixels, but on the stage its
+outline ran off the edges and its corners couldn't be reached. Separately,
+the projector window had ended up on a different display (1920×1080) than
+the editor thought (the 1512×982 laptop screen), so the stage had the
+wrong shape.
+
+**Decision.**
+- "Project onto the wall" straightens the frame's part of the photo into
+  a frame-shaped image (`capture:rectify`, `main/capture/rectify.ts`) on
+  a surface that fills the frame exactly.
+- Any surface that reaches past the frame shows a note in its drawer,
+  with **Fit to the frame**. For an image it uses `frameInImage` to find
+  the frame's part of the image and straightens it; the mask is cleared
+  because it was drawn for the old layout. Otherwise it brings the corners
+  inside.
+- The stage never draws past its edge: outlines are clipped just outside
+  it, and corners beyond the frame are pinned to the edge, dashed. Dragging
+  one starts from there.
+- The projector window reports which display it's actually on
+  (`output:display-changed`), and the stage and picker follow it.
+
+**Considered.**
+- Clamping corners into the frame. That distorts the image.
+- Allowing corners far off-stage with scroll or zoom on the stage. A
+  bigger change, for a surface that can't be lit beyond the frame anyway.
+- Re-mapping the mask on Fit to the frame. Masks live in the mask store,
+  not the library; deferred, and the note says the mask is cleared.
+
+**Verified by** `main/capture/rectify.test.ts` (identity, crop,
+perspective undone, outside-photo black, non-convex refused),
+`frameInImage` / `reachesPastFrame` cases in `shared/homography.test.ts`,
+and `e2e/scan.spec.ts` (the scan surface fills the frame with a "(fit to
+projector)" image and re-projects the markers onto their own pixels;
+an oversized surface shows pinned corners and the note, and Fit to the
+frame fixes it).
+

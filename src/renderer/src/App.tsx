@@ -80,6 +80,19 @@ export default function App() {
     []
   )
 
+  // The projector window can end up on another display than the one it was
+  // opened on (macOS moves fullscreen windows when displays are rearranged).
+  // Follow it, so the stage keeps the projector's real shape.
+  const setOutputDisplayId = useSceneStore((s) => s.setOutputDisplayId)
+  useEffect(
+    () =>
+      window.mirrorcat.onOutputDisplayChanged((id) => {
+        setOutputDisplayId(id)
+        setSelectedDisplayId(id)
+      }),
+    [setOutputDisplayId]
+  )
+
   // Lives here (not in the sidebar) because the stage needs the chosen
   // display's shape to frame itself as the projector.
   useEffect(() => {

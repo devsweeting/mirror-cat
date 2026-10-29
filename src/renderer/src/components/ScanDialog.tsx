@@ -3,7 +3,7 @@ import type { CaptureEvent, CaptureSession, FrameDetection } from '@shared/captu
 import { CAPTURE_SESSION_MS } from '@shared/capture'
 import { mediaUrl, type MediaAsset } from '@shared/media'
 import type { CornerSet, Surface } from '@shared/types'
-import { photoSurfaceCorners } from '@shared/scanPattern'
+import { FULL_FRAME } from '@shared/scanPattern'
 import { useSceneStore } from '../state/sceneStore'
 import FrameCornersEditor from './FrameCornersEditor'
 
@@ -168,19 +168,31 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
     onClose()
   }
 
-  const projectOntoWall = (asset: MediaAsset, frameInPhoto: CornerSet): void => {
-    const corners = photoSurfaceCorners(frameInPhoto)
-    if (!corners) {
+  const [projecting, setProjecting] = useState(false)
+
+  /**
+   * Straighten the frame's part of the photo into a projector-sized image
+   * and put it on a new surface that fills the frame exactly: every photo
+   * pixel lands on the projector pixel that lit it, and the surface stays
+   * inside the projector's area (nothing outside it can be lit anyway).
+   */
+  const projectOntoWall = async (asset: MediaAsset, frameInPhoto: CornerSet): Promise<void> => {
+    setProjecting(true)
+    setNotice(null)
+    try {
+      const fitted = await window.mirrorcat.capture.rectify(asset.id, frameInPhoto)
+      const scene = store.getState()
+      const id = scene.addSurface('Scan')
+      scene.setSurfaceAsset(id, fitted.id)
+      scene.updateCorners(id, FULL_FRAME.map((c) => ({ ...c })) as CornerSet)
+      scene.updateSurfaceSettings(id, { fit: 'stretch', warp: 'perspective' })
+      onProjected(id)
+      onClose()
+    } catch (error) {
+      console.error('[scan] could not fit the photo', error)
       setNotice('Those corners don’t make a frame shape. Move them onto the frame’s corners and try again.')
-      return
+      setProjecting(false)
     }
-    const scene = store.getState()
-    const id = scene.addSurface('Scan')
-    scene.setSurfaceAsset(id, asset.id)
-    scene.updateCorners(id, corners)
-    scene.updateSurfaceSettings(id, { fit: 'stretch', warp: 'perspective' })
-    onProjected(id)
-    onClose()
   }
 
   const takeAnother = (session: CaptureSession): void => {
@@ -274,10 +286,11 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
                 <button
                   type="button"
                   className="btn"
-                  onClick={() => projectOntoWall(phase.asset, detect.corners)}
-                  title="Make a surface that shows the photo exactly where it was taken"
+                  onClick={() => void projectOntoWall(phase.asset, detect.corners)}
+                  disabled={projecting}
+                  title="Fit the photo to the projector and show it exactly where it was taken"
                 >
-                  Project onto the wall
+                  {projecting ? 'Fitting to the projector…' : 'Project onto the wall'}
                 </button>
               )}
               {surface && (

@@ -10,6 +10,8 @@ import { pickLanAddress, type LanAddress } from '../capture/lanAddress'
 import { getControlWindow } from '../windows/controlWindow'
 import { getOutputWindow } from '../windows/outputWindow'
 import { bgraToRgba, detectSize, locateFrame } from '../capture/frameDetect'
+import { rectifiedSize, rectifyQuad } from '../capture/rectify'
+import type { CornerSet } from '../../shared/types'
 import { requireControlWindow } from './trust'
 
 let active: CaptureServer | null = null
@@ -29,6 +31,27 @@ function stopActive(): void {
 }
 
 const NO_FRAME: FrameDetection = { corners: null, markersFound: [], estimated: true }
+
+/** Four finite corners within a sane range (an image can sit well past the frame). */
+function parseCorners(value: unknown): CornerSet | null {
+  if (!Array.isArray(value) || value.length !== 4) return null
+  const ok = value.every(
+    (c) =>
+      c &&
+      typeof c === 'object' &&
+      Number.isFinite((c as { x: number }).x) &&
+      Number.isFinite((c as { y: number }).y) &&
+      Math.abs((c as { x: number }).x) < 100 &&
+      Math.abs((c as { y: number }).y) < 100
+  )
+  return ok ? (value.map((c) => ({ x: c.x, y: c.y })) as CornerSet) : null
+}
+
+function positiveInt(value: unknown, fallback: number): number {
+  return Number.isInteger(value) && (value as number) > 0 && (value as number) <= 16384
+    ? (value as number)
+    : fallback
+}
 
 /**
  * Where to listen. Development builds can force an address with
@@ -123,6 +146,34 @@ export function registerCaptureHandlers({ library }: { library: MediaLibrary }):
       return NO_FRAME
     }
   })
+
+  // Straighten the frame's part of an image (a scan photo, or the image of
+  // a surface that reaches past the frame) into an image the frame's shape,
+  // saved to the library. The live projector window's size wins; otherwise
+  // the size the editor passes (the chosen display's).
+  ipcMain.handle(
+    IpcChannels.CaptureRectify,
+    async (event, id: unknown, corners: unknown, frame: unknown) => {
+      requireControlWindow(event)
+      const asset = typeof id === 'string' && ASSET_ID_PATTERN.test(id) ? library.get(id) : undefined
+      const frameInImage = parseCorners(corners)
+      if (!asset || asset.kind !== 'image' || !frameInImage) throw new Error('Can’t straighten that')
+      const out = getOutputWindow()
+      const live = out && !out.isDestroyed() ? out.getContentSize() : null
+      const requested = (frame ?? {}) as { width?: unknown; height?: unknown }
+      const frameWidth = live?.[0] ?? positiveInt(requested.width, 1920)
+      const frameHeight = live?.[1] ?? positiveInt(requested.height, 1080)
+      const image = nativeImage.createFromPath(library.filePath(asset))
+      if (image.isEmpty()) throw new Error('Couldn’t read that image')
+      const { width, height } = image.getSize()
+      const size = rectifiedSize(frameWidth, frameHeight)
+      const pixels = rectifyQuad(image.toBitmap(), width, height, frameInImage, size.width, size.height)
+      if (!pixels) throw new Error('Those corners don’t make a frame shape')
+      const jpeg = nativeImage.createFromBitmap(pixels, size).toJPEG(92)
+      const base = asset.name.replace(/ \(fit to projector\)$/, '')
+      return library.importBuffer(jpeg, { name: `${base} (fit to projector)`, source: 'upload' })
+    }
+  )
 
   ipcMain.handle(IpcChannels.CaptureStop, (event) => {
     requireControlWindow(event)

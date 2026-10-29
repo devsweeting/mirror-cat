@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { IpcChannels } from '../shared/ipcChannels'
-import type { DisplayInfo, EditCommand, SceneState, Surface } from '../shared/types'
+import type { CornerSet, DisplayInfo, EditCommand, SceneState, Surface } from '../shared/types'
 import type {
   GeneratedImageImport,
   MediaAsset,
@@ -80,6 +80,16 @@ const capture = {
   /** Where the projector frame is in a scan photo (needs the projector open). */
   detectFrame: (assetId: string): Promise<FrameDetection> =>
     ipcRenderer.invoke(IpcChannels.CaptureDetectFrame, assetId),
+  /**
+   * Straighten the part of an image inside `corners` (0..1 of the image)
+   * into a frame-shaped image in the library. `frame` is the frame size to
+   * use when the projector isn't open.
+   */
+  rectify: (
+    assetId: string,
+    corners: CornerSet,
+    frame?: { width: number; height: number }
+  ): Promise<MediaAsset> => ipcRenderer.invoke(IpcChannels.CaptureRectify, assetId, corners, frame),
   /** Projector window: draw the scan pattern or not. */
   onPattern: (callback: (on: boolean) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, on: boolean): void => callback(on)
@@ -123,6 +133,13 @@ const api = {
     ipcRenderer.invoke(IpcChannels.OpenOutputWindow, displayId),
 
   closeOutputWindow: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.CloseOutputWindow),
+
+  /** The projector window ended up on another display (macOS moved it, displays rearranged). */
+  onOutputDisplayChanged: (callback: (displayId: number) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, id: number): void => callback(id)
+    ipcRenderer.on(IpcChannels.OutputDisplayChanged, listener)
+    return () => ipcRenderer.removeListener(IpcChannels.OutputDisplayChanged, listener)
+  },
 
   /** The projector window closed by any route (Esc, Stop, display unplugged). */
   onOutputClosed: (callback: () => void): (() => void) => {

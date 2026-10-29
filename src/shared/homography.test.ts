@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { applyHomography, squareToQuad } from './surfaceGeometry'
 import { fitHomography, invertHomography } from './homography'
-import { photoSurfaceCorners } from './scanPattern'
+import { FULL_FRAME, frameInImage, reachesPastFrame } from './scanPattern'
 import type { CornerSet } from './types'
 
 const QUAD: CornerSet = [
@@ -72,14 +72,9 @@ describe('invertHomography', () => {
   })
 })
 
-describe('photoSurfaceCorners', () => {
-  it('is the identity when the photo is exactly the frame', () => {
-    const corners = photoSurfaceCorners([
-      { x: 0, y: 0 },
-      { x: 1, y: 0 },
-      { x: 1, y: 1 },
-      { x: 0, y: 1 }
-    ])!
+describe('frameInImage', () => {
+  it('is the whole image when the surface is exactly the frame', () => {
+    const corners = frameInImage(FULL_FRAME)!
     expect(corners.map((c) => [c.x, c.y].map((v) => +v.toFixed(9)))).toEqual([
       [0, 0],
       [1, 0],
@@ -88,31 +83,34 @@ describe('photoSurfaceCorners', () => {
     ])
   })
 
-  it('spreads the photo past the frame when the frame fills only part of it', () => {
-    // Frame occupies the middle 80% of the photo: the photo's edges sit 12.5% outside the frame.
-    const corners = photoSurfaceCorners([
-      { x: 0.1, y: 0.1 },
-      { x: 0.9, y: 0.1 },
-      { x: 0.9, y: 0.9 },
-      { x: 0.1, y: 0.9 }
+  it('finds the middle of an image spread 12.5% past the frame on every side', () => {
+    const corners = frameInImage([
+      { x: -0.125, y: -0.125 },
+      { x: 1.125, y: -0.125 },
+      { x: 1.125, y: 1.125 },
+      { x: -0.125, y: 1.125 }
     ])!
-    expect(corners[0].x).toBeCloseTo(-0.125, 9)
-    expect(corners[0].y).toBeCloseTo(-0.125, 9)
-    expect(corners[2].x).toBeCloseTo(1.125, 9)
-    expect(corners[2].y).toBeCloseTo(1.125, 9)
+    expect(corners[0].x).toBeCloseTo(0.1, 9)
+    expect(corners[0].y).toBeCloseTo(0.1, 9)
+    expect(corners[2].x).toBeCloseTo(0.9, 9)
+    expect(corners[2].y).toBeCloseTo(0.9, 9)
   })
 
-  it('maps each photo point to the frame point that lit it', () => {
-    const frameInPhoto = QUAD
-    const surface = photoSurfaceCorners(frameInPhoto)!
-    // The surface shows the photo via unit square → surface corners. A
-    // photo point p should land where the frame→photo map says it came from.
-    const surfaceMap = squareToQuad(surface)!
-    const frameToPhoto = squareToQuad(frameInPhoto)!
-    const framePoint = { x: 0.4, y: 0.6 }
-    const photoPoint = applyHomography(frameToPhoto, framePoint.x, framePoint.y)
-    const landed = applyHomography(surfaceMap, photoPoint.x, photoPoint.y)
-    expect(landed.x).toBeCloseTo(framePoint.x, 9)
-    expect(landed.y).toBeCloseTo(framePoint.y, 9)
+  it('inverts the surface warp: image points inside the frame map back to themselves', () => {
+    const surface = QUAD
+    const inImage = frameInImage(surface)!
+    const imageToFrame = squareToQuad(surface)!
+    // The frame's top-left corner is where inImage[0] lands.
+    const p = applyHomography(imageToFrame, inImage[0].x, inImage[0].y)
+    expect(p.x).toBeCloseTo(0, 9)
+    expect(p.y).toBeCloseTo(0, 9)
+  })
+})
+
+describe('reachesPastFrame', () => {
+  it('spots corners outside 0..1', () => {
+    expect(reachesPastFrame(FULL_FRAME)).toBe(false)
+    expect(reachesPastFrame(QUAD)).toBe(false)
+    expect(reachesPastFrame([{ x: -0.2, y: 0 }, ...FULL_FRAME.slice(1)] as CornerSet)).toBe(true)
   })
 })

@@ -97,8 +97,11 @@ TypeScript + React + Three.js:
     scan pattern (glowing frame + ArUco markers, `shared/scanPattern.ts`);
     main finds the frame (`main/capture/frameDetect.ts`, js-aruco2 --
     CommonJS, import its default), the dialog lets you check corners,
-    and "Project onto the wall" makes a surface that re-projects the
-    photo exactly (`photoSurfaceCorners`, decision 029).
+    and "Project onto the wall" straightens the frame's part of the photo
+    (`capture:rectify`, `main/capture/rectify.ts`) onto a surface that
+    fills the frame exactly (decisions 029–030). Surfaces never reach past
+    the frame in new flows; old ones get "Fit to the frame" in the drawer.
+    The projector window reports its real display (`output:display-changed`).
   - Settings › AI & animation (`components/settings/`, `main/ai/`,
     `shared/ai.ts`; docs/ai-settings.md): provider keys checked with a free
     request, encrypted with safeStorage in main, never returned to the

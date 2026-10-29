@@ -368,11 +368,14 @@ export default function ProjectionCanvas({
           nodes.map((node, i) => (
             <div
               key={node.id}
-              className="edge-node-handle"
+              className={`edge-node-handle${clamp01(node.x) !== node.x || clamp01(node.y) !== node.y ? ' offstage' : ''}`}
               tabIndex={0}
               aria-label={`${surface.name} ${EDGE_LABELS[edge]} edge node ${i + 1}. Press Delete to remove.`}
-              style={{ left: `${node.x * 100}%`, top: `${node.y * 100}%` }}
-              onPointerDown={startDrag({ kind: 'node', id: node.id }, node)}
+              style={{ left: `${clamp01(node.x) * 100}%`, top: `${clamp01(node.y) * 100}%` }}
+              onPointerDown={startDrag(
+                { kind: 'node', id: node.id },
+                { x: clamp01(node.x), y: clamp01(node.y) }
+              )}
               onKeyDown={handleNodeKeyDown(node.id)}
             >
               <span className="edge-node-ring" />
@@ -381,26 +384,36 @@ export default function ProjectionCanvas({
           ))
         )}
       {showHandles &&
-        surface.corners.map((corner, index) => (
-          <div
-            key={index}
-            className="corner-handle"
-            aria-label={`${surface.name} ${CORNER_LABELS[index]} corner`}
-            title="Shift-drag to keep the media’s proportions"
-            style={{ left: `${corner.x * 100}%`, top: `${corner.y * 100}%` }}
-            onPointerDown={startDrag({ kind: 'corner', index }, corner)}
-          >
-            <span className="corner-ring" />
-            <span className="corner-dot" />
-          </div>
-        ))}
+        surface.corners.map((corner, index) => {
+          // Beyond the frame (an imported or scanned surface): pinned to
+          // the stage edge so it stays reachable; dragging starts there.
+          const shown = { x: clamp01(corner.x), y: clamp01(corner.y) }
+          const offstage = shown.x !== corner.x || shown.y !== corner.y
+          return (
+            <div
+              key={index}
+              className={`corner-handle${offstage ? ' offstage' : ''}`}
+              aria-label={`${surface.name} ${CORNER_LABELS[index]} corner${offstage ? ', outside the projector frame' : ''}`}
+              title={
+                offstage
+                  ? 'This corner is outside the projector frame. Drag to bring it in.'
+                  : 'Shift-drag to keep the media’s proportions'
+              }
+              style={{ left: `${shown.x * 100}%`, top: `${shown.y * 100}%` }}
+              onPointerDown={startDrag({ kind: 'corner', index }, shown)}
+            >
+              <span className="corner-ring" />
+              <span className="corner-dot" />
+            </div>
+          )
+        })}
       {painting && <MaskPaintLayer surface={surface} toLocal={toLocal} />}
       {showHandles && lockHint && (
         <div
           className={`ratio-lock ratio-lock-${lockHint.index}`}
           style={{
-            left: `${surface.corners[lockHint.index].x * 100}%`,
-            top: `${surface.corners[lockHint.index].y * 100}%`
+            left: `${clamp01(surface.corners[lockHint.index].x) * 100}%`,
+            top: `${clamp01(surface.corners[lockHint.index].y) * 100}%`
           }}
           aria-live="polite"
         >

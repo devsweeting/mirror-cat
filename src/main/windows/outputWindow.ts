@@ -1,6 +1,8 @@
-import { BrowserWindow, app, type Display } from 'electron'
+import { BrowserWindow, app, screen, type Display } from 'electron'
 import { join } from 'path'
 import { hardenWindow } from './security'
+import { getControlWindow } from './controlWindow'
+import { IpcChannels } from '../../shared/ipcChannels'
 
 let outputWindow: BrowserWindow | null = null
 /** The display the projector window was opened on. */
@@ -68,6 +70,27 @@ export function openOutputWindow(display: Display): BrowserWindow {
   outputWindow = win
   outputDisplayId = display.id
   hardenWindow(win)
+
+  // macOS can move a fullscreen window to another display (displays
+  // rearranged, a new primary display). Keep track of where it really is,
+  // and tell the editor, whose stage takes that display's shape.
+  const followDisplay = (): void => {
+    if (win.isDestroyed() || outputWindow !== win) return
+    const actual = screen.getDisplayMatching(win.getBounds())
+    if (actual.id === outputDisplayId) return
+    outputDisplayId = actual.id
+    getControlWindow()?.webContents.send(IpcChannels.OutputDisplayChanged, actual.id)
+  }
+  win.on('move', followDisplay)
+  win.on('enter-full-screen', followDisplay)
+  screen.on('display-metrics-changed', followDisplay)
+  screen.on('display-added', followDisplay)
+  screen.on('display-removed', followDisplay)
+  win.on('closed', () => {
+    screen.removeListener('display-metrics-changed', followDisplay)
+    screen.removeListener('display-added', followDisplay)
+    screen.removeListener('display-removed', followDisplay)
+  })
 
   // Only clear the shared reference if it still points at *this* window --
   // an older window's close can resolve after a newer one has replaced it.

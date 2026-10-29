@@ -42,6 +42,10 @@ export const IpcChannels = {
   CapturePatternShow: 'capture:pattern-show',
   /** Control window → main: find the projector frame in a scan photo. */
   CaptureDetectFrame: 'capture:detect-frame',
+  /** Control window → main: straighten the frame's part of an image into a frame-sized image. */
+  CaptureRectify: 'capture:rectify',
+  /** Main → control window: the projector window is now on a different display. */
+  OutputDisplayChanged: 'output:display-changed',
 
   /** Main → control window: open Settings (app menu, ⌘,). */
   SettingsOpen: 'settings:open',

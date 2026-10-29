@@ -97,29 +97,39 @@ export function patternValue(x: number, y: number, width: number, height: number
 }
 
 /**
- * Corners for a surface that shows the scan photo exactly where it came
- * from: every photo pixel lands on the projector pixel that lit it.
- *
- * `frameInPhoto` is where the projector frame's corners are in the photo
- * (0..1 of the photo, TL, TR, BR, BL). The frame→photo homography is the
- * unit square → those corners; inverting it and sending the photo's own
- * corners through gives the surface's corners in frame units (0..1, often
- * outside it, since photos show more than the frame). The surface's
- * perspective warp then reproduces that homography exactly.
+ * Where the projector frame sits in a surface's image (0..1 of the image;
+ * TL, TR, BR, BL), for a surface that shows its whole image with a plain
+ * perspective warp. The surface maps the image's unit square onto its
+ * corners in the frame; inverting that and sending the frame's own corners
+ * back through says which part of the image lands inside the frame. Used
+ * to straighten an image that reaches past the frame into one that fits
+ * it ("Fit to the frame"). Null for a non-convex shape.
  */
-export function photoSurfaceCorners(frameInPhoto: CornerSet): CornerSet | null {
-  const frameToPhoto = squareToQuad(frameInPhoto)
-  const photoToFrame = frameToPhoto && invertHomography(frameToPhoto)
-  if (!photoToFrame) return null
+export function frameInImage(surfaceCorners: CornerSet): CornerSet | null {
+  const imageToFrame = squareToQuad(surfaceCorners)
+  const frameToImage = imageToFrame && invertHomography(imageToFrame)
+  if (!frameToImage) return null
   const corners = [
     [0, 0],
     [1, 0],
     [1, 1],
     [0, 1]
-  ].map(([u, v]) => {
-    const w = photoToFrame.g * u + photoToFrame.h * v + 1
-    return w > 0 ? applyHomography(photoToFrame, u, v) : null
-  })
-  if (corners.some((c) => c === null || !Number.isFinite(c.x) || !Number.isFinite(c.y))) return null
-  return corners as CornerSet
+  ].map(([u, v]) => applyHomography(frameToImage, u, v))
+  return corners.every((c) => Number.isFinite(c.x) && Number.isFinite(c.y))
+    ? (corners as CornerSet)
+    : null
 }
+
+/** True when any corner sits outside the projector frame (beyond a hair of float noise). */
+export function reachesPastFrame(corners: CornerSet): boolean {
+  const eps = 1e-6
+  return corners.some((c) => c.x < -eps || c.y < -eps || c.x > 1 + eps || c.y > 1 + eps)
+}
+
+/** The whole projector frame, as surface corners. */
+export const FULL_FRAME: CornerSet = [
+  { x: 0, y: 0 },
+  { x: 1, y: 0 },
+  { x: 1, y: 1 },
+  { x: 0, y: 1 }
+]

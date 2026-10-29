@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { createSurface, type SceneState } from '../src/shared/types'
-import { goLive, launchApp, type Launched } from './helpers'
+import { goLive, importTestImage, launchApp, type Launched } from './helpers'
 
 function scene(): SceneState {
   return { surfaces: [createSurface('s-1', 'Vase')], outputDisplayId: null }
@@ -158,21 +158,73 @@ test('live scan: the projector shows the frame, MirrorCat finds it, and the phot
     await expect(lineUp).toHaveCount(0)
     await expect(page.locator('.surface-header', { hasText: 'Scan' })).toBeVisible()
 
-    // The new surface spreads the photo past the frame: its corners sit ~12.5% outside.
+    // The new surface fills the projector frame exactly, showing the photo
+    // straightened to the frame -- nothing reaches past the projector's area.
     await expect
       .poll(async () => {
         const saved = JSON.parse(await readFile(join(userData, 'scene.json'), 'utf8'))
         return saved.surfaces.find((s: { name: string }) => s.name === 'Scan')?.corners
       })
-      .toBeTruthy()
-    const saved = JSON.parse(await readFile(join(userData, 'scene.json'), 'utf8'))
-    const corners = saved.surfaces.find((s: { name: string }) => s.name === 'Scan').corners
-    expect(corners[0].x).toBeCloseTo(-0.125, 1)
-    expect(corners[0].y).toBeCloseTo(-0.125, 1)
-    expect(corners[2].x).toBeCloseTo(1.125, 1)
-    expect(corners[2].y).toBeCloseTo(1.125, 1)
+      .toEqual([
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+        { x: 0, y: 1 }
+      ])
+    // It shows the straightened copy, saved to the library next to the photo.
+    const sceneNow = JSON.parse(await readFile(join(userData, 'scene.json'), 'utf8'))
+    const scanSurface = sceneNow.surfaces.find((s: { name: string }) => s.name === 'Scan')
+    const index = JSON.parse(await readFile(join(userData, 'media', 'library.json'), 'utf8'))
+    const assets: { id: string; name: string }[] = index.assets ?? index
+    expect(assets.find((a) => a.id === scanSurface.assetId)?.name).toMatch(/\(fit to projector\)$/)
+    await expect(page.locator('.corner-handle.offstage')).toHaveCount(0)
     await output.waitForTimeout(300)
     await output.screenshot({ path: 'test-results/scan-projected.png' })
+    expect(run.problems).toEqual([])
+  } finally {
+    await run.close()
+  }
+})
+
+test('a surface reaching past the frame offers to fit its image to the frame', async () => {
+  const wide = {
+    ...createSurface('s-wide', 'Wide'),
+    corners: [
+      { x: -0.125, y: -0.125 },
+      { x: 1.125, y: -0.125 },
+      { x: 1.125, y: 1.125 },
+      { x: -0.125, y: 1.125 }
+    ]
+  }
+  const run = await launchApp({ scene: { surfaces: [wide], outputDisplayId: null } })
+  try {
+    const { page, userData } = run
+    await importTestImage(page, 'wide-photo')
+    await page.locator('.topbar-library').click()
+    const library = page.getByRole('complementary', { name: 'Media library' })
+    await library.locator('.library-tile', { hasText: 'wide-photo' }).click()
+    await library.getByRole('button', { name: 'Use on Wide' }).click()
+    await page.locator('.topbar-library').click()
+
+    await page.locator('.surface-header', { hasText: 'Wide' }).click()
+    // Corners beyond the frame are pinned to the stage edge, not drawn off it.
+    await expect(page.locator('.corner-handle.offstage')).toHaveCount(4)
+    const note = page.locator('.surface-drawer').getByRole('status').filter({ hasText: 'reaches past' })
+    await expect(note).toBeVisible()
+    await page.screenshot({ path: 'test-results/fit-to-frame-before.png' })
+    await note.getByRole('button', { name: 'Fit to the frame' }).click()
+    await expect(note).toHaveCount(0)
+    await expect(page.locator('.corner-handle.offstage')).toHaveCount(0)
+
+    await expect
+      .poll(async () => JSON.parse(await readFile(join(userData, 'scene.json'), 'utf8')).surfaces[0].corners)
+      .toEqual([
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: 1, y: 1 },
+        { x: 0, y: 1 }
+      ])
+    await expect(page.getByText('wide-photo (fit to projector)').first()).toBeVisible()
     expect(run.problems).toEqual([])
   } finally {
     await run.close()
