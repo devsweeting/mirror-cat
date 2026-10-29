@@ -256,18 +256,26 @@ Which drawers are open is local component state and deliberately not in
 the store.
 
 ### `components/SurfaceSettingsDrawer.tsx`
-The per-surface settings hub. Today it holds:
-- An actions row: a pencil icon renames the surface inline (Enter or
-  clicking away saves, Escape cancels, blank names are ignored), and a
-  trash icon deletes it after an inline "Delete / Cancel" confirmation.
+The per-surface settings, ordered by how often you use them while working
+(decision 026):
 - Content (`SurfaceContentControls`): a preview row that opens a menu
-  (Upload / Choose from library / Remove), plus Fit (Stretch / Fill) once
-  there's an image
-- Outline color: the `SURFACE_PALETTE` swatches plus a custom-color
-  swatch wrapping the native picker
-- Opacity, 0–100% (styled slider filled in the surface color)
-- An edge-node stepper, labelled "Edge points" in the UI (+ adds a node on the longest segment, − removes
-  the newest), with an info icon that expands usage help
+  (Upload / Choose from library / Remove), plus Fit (Stretch / Fill) and
+  Loop once there's media
+- Mask (`SurfaceMaskControls`): the mask well (click to edit on the
+  stage, drop an image), Edge softness, and a "…" popover for invert,
+  grow, replace and remove
+- Grid (Off / On) and Opacity (one line, slider filled in the surface
+  color)
+- Shape, collapsed by default with a summary ("Perspective, 4 points";
+  open state remembered in localStorage): Warp (Perspective / Even) and
+  the edge-point stepper, with an info icon for how-to. The non-convex
+  fallback note shows even while collapsed.
+
+### `components/SurfaceMenu.tsx`
+The "…" on the open surface's row: name (saved on Enter, blur or closing),
+outline color (`SURFACE_PALETTE` plus a custom color via the native
+picker), and Delete surface with an inline confirmation. Rendered beside
+the draggable row, not inside it, so its fields can't start a restack.
 
 New per-surface settings belong here.
 

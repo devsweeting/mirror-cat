@@ -53,6 +53,8 @@ test('the drawer toggles the grid and explains a non-convex fallback', async () 
   await grid.getByRole('radio', { name: 'On' }).click()
   await expect(grid.getByRole('radio', { name: 'On' })).toHaveAttribute('aria-checked', 'true')
 
+  // Warp lives in the collapsed "Shape" section.
+  await drawer.getByRole('button', { name: /Shape/ }).click()
   const warp = drawer.getByRole('radiogroup', { name: 'Warp' })
   await expect(warp.getByRole('radio', { name: 'Perspective' })).toHaveAttribute(
     'aria-checked',

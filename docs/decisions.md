@@ -461,3 +461,26 @@ over a MessagePort (deferred -- the next step).
 drop + relaunch, cut-out offer) and the `outlineToContent` /
 `dedupeOutline` cases in `shared/warpPick.test.ts`.
 
+## 026 Surface drawer: everyday controls first, set-once ones in the row menu
+*2026-10-28 · Accepted*
+
+**Context.** The drawer showed everything at once: a nine-swatch color
+strip, rename/delete icons on their own row, opacity on two lines, warp
+mode and an edge-point stepper -- most of which you set once, if ever.
+
+**Decision.** The drawer is ordered by how often you reach for things:
+content, mask, grid, opacity (one line). Warp and edge points fold into a
+collapsed "Shape" section whose summary says the current state
+("Perspective, 4 points"); its open/closed state is remembered. The
+non-convex fallback note shows even when it's collapsed. Name, outline
+color and delete move to a "…" menu on the open surface's row
+(`SurfaceMenu`), outside the draggable row so its controls can't start a
+restack; the row's dot already shows the color.
+
+**Considered.** Hiding opacity too (it's used to dim content mid-session,
+so it stays); a full popover for all settings (hides the everyday ones);
+moving the color into the visibility dot (overloads a toggle).
+
+**Verified by** `e2e/drawer.spec.ts` (folded Shape, summary updates, row
+menu rename / recolor / delete) and `e2e/grid.spec.ts`.
+
