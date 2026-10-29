@@ -382,3 +382,58 @@ textarea {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* ---------- Tooltip and keycaps ---------- */
+/* A short label with the shortcut, above (or below) its control. */
+.tooltip {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  padding: 5px 8px 5px 10px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--plaster);
+  background: var(--wall-raised);
+  border: 1px solid color-mix(in srgb, var(--dusk) 25%, transparent);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.tooltip.top {
+  transform: translate(-50%, calc(-100% - 8px));
+}
+
+.tooltip.bottom {
+  transform: translate(-50%, 8px);
+}
+
+.keys {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.key {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--plaster);
+  background: color-mix(in srgb, var(--room) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dusk) 35%, transparent);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+}
+
+.tip-anchor {
+  display: contents;
+}

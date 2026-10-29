@@ -15,6 +15,8 @@ import type {
   SetKeyResult
 } from '../shared/ai'
 import type { CaptureEvent, CaptureStartResult, FrameDetection } from '../shared/capture'
+import type { DetectedShape } from '../shared/shapes'
+import type { BoxResult, FrameBox, SamStatus } from '../shared/sam'
 
 const media = {
   list: (): Promise<MediaAsset[]> => ipcRenderer.invoke(IpcChannels.MediaList),
@@ -90,6 +92,28 @@ const capture = {
     corners: CornerSet,
     frame?: { width: number; height: number }
   ): Promise<MediaAsset> => ipcRenderer.invoke(IpcChannels.CaptureRectify, assetId, corners, frame),
+  /** Flat shapes in a fitted scan image (0..1 of the frame). */
+  findShapes: (assetId: string): Promise<DetectedShape[]> =>
+    ipcRenderer.invoke(IpcChannels.CaptureFindShapes, assetId),
+  /** Mask id for a found shape on a surface with these corners, or null. */
+  shapeMask: (assetId: string, shapeId: string, corners: CornerSet): Promise<string | null> =>
+    ipcRenderer.invoke(IpcChannels.CaptureShapeMask, assetId, shapeId, corners),
+  /** More shapes from the detailed finder (SAM 2), numbered after the ones found. */
+  findMore: (assetId: string): Promise<DetectedShape[]> => ipcRenderer.invoke(IpcChannels.CaptureFindMore, assetId),
+  /** The shape inside a box (0..1 of the frame). */
+  findInBox: (assetId: string, box: FrameBox): Promise<BoxResult> =>
+    ipcRenderer.invoke(IpcChannels.CaptureFindInBox, assetId, box),
+  /** Several found shapes as one new shape (null if they can't be combined). */
+  combineShapes: (assetId: string, shapeIds: string[]): Promise<DetectedShape | null> =>
+    ipcRenderer.invoke(IpcChannels.CaptureCombineShapes, assetId, shapeIds),
+  samStatus: (): Promise<SamStatus> => ipcRenderer.invoke(IpcChannels.SamStatus),
+  samDownload: (): Promise<SamStatus> => ipcRenderer.invoke(IpcChannels.SamDownload),
+  samCancel: (): Promise<SamStatus> => ipcRenderer.invoke(IpcChannels.SamCancel),
+  onSamStatus: (callback: (status: SamStatus) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: SamStatus): void => callback(status)
+    ipcRenderer.on(IpcChannels.SamProgress, listener)
+    return () => ipcRenderer.removeListener(IpcChannels.SamProgress, listener)
+  },
   /** Projector window: draw the scan pattern or not. */
   onPattern: (callback: (on: boolean) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, on: boolean): void => callback(on)

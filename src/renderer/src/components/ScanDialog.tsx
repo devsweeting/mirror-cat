@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import type { CaptureEvent, CaptureSession, FrameDetection } from '@shared/capture'
 import { CAPTURE_SESSION_MS } from '@shared/capture'
 import { mediaUrl, type MediaAsset } from '@shared/media'
@@ -6,27 +6,28 @@ import type { CornerSet, Surface } from '@shared/types'
 import { FULL_FRAME } from '@shared/scanPattern'
 import { useSceneStore } from '../state/sceneStore'
 import FrameCornersEditor from './FrameCornersEditor'
+import ShapesStep from './ShapesStep'
 
 interface ScanDialogProps {
   /** Where "Put on …" sends the photo; null when no surface is selected. */
   surface: Surface | null
   /** Whether the projector is on. Only then can the scan pattern be shown. */
   live: boolean
-  /** A new surface showing the photo on the wall was made; select it. */
+  /** A new surface (or surfaces) was made from the scan; select it. */
   onProjected: (surfaceId: string) => void
   onClose: () => void
 }
 
-type Detect =
-  | { state: 'off' }
-  | { state: 'finding' }
-  | { state: 'done'; result: FrameDetection; corners: CornerSet }
+type FoundFrame = { state: 'done'; result: FrameDetection; corners: CornerSet }
+type Detect = { state: 'off' } | { state: 'finding' } | FoundFrame
 
 type Phase =
   | { kind: 'starting' }
   | { kind: 'error'; message: string }
   | { kind: 'waiting'; session: CaptureSession; phone: 'none' | 'connected' | 'sending' }
   | { kind: 'photo'; session: CaptureSession; asset: MediaAsset; detect: Detect }
+  /** `detect` is the lined-up frame, kept to go back to; `fitted` the photo fitted to the projector. */
+  | { kind: 'shapes'; session: CaptureSession; asset: MediaAsset; detect: FoundFrame; fitted: MediaAsset }
   | { kind: 'expired' }
 
 /** Starting corners when the frame wasn't found: a guess to drag from. */
@@ -38,7 +39,7 @@ const GUESS: CornerSet = [
 ]
 
 const FOCUSABLE =
-  'a[href], button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])'
+  'a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])'
 
 /**
  * Scan: take a photo with your phone and bring it into MirrorCat.
@@ -46,14 +47,16 @@ const FOCUSABLE =
  * While it waits, the projector (if live) shows the scan pattern -- a
  * glowing frame with a marker in each corner. When the photo arrives, the
  * frame is found in it, outlined for you to check (drag a corner to fix
- * it), and "Project onto the wall" makes a surface that shows the photo
- * exactly where it came from. The link and the pattern close with the
- * dialog.
+ * it). Continue fits the photo to the projector and opens Pick the shapes
+ * (ShapesStep), where found shapes become surfaces. Or project the whole
+ * photo exactly where it came from. The link and the pattern close with
+ * the dialog.
  */
 export default function ScanDialog({ surface, live, onProjected, onClose }: ScanDialogProps) {
   const store = useSceneStore
   const [phase, setPhase] = useState<Phase>({ kind: 'starting' })
   const [notice, setNotice] = useState<string | null>(null)
+  const [fitting, setFitting] = useState(false)
   const dialogRef = useRef<HTMLDivElement>(null)
   // Read inside the phone-event listener, which shouldn't re-subscribe on every change.
   const liveRef = useRef(live)
@@ -106,6 +109,7 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
         if (event.type === 'photo' && liveRef.current) void findFrame(event.asset)
         setPhase((current) => {
           if (event.type === 'expired') return { kind: 'expired' }
+          // Picking shapes isn't interrupted by another photo; it waits in the library.
           if (current.kind !== 'waiting' && current.kind !== 'photo') return current
           const session = current.session
           switch (event.type) {
@@ -168,31 +172,34 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
     onClose()
   }
 
-  const [projecting, setProjecting] = useState(false)
-
   /**
    * Straighten the frame's part of the photo into a projector-sized image
-   * and put it on a new surface that fills the frame exactly: every photo
-   * pixel lands on the projector pixel that lit it, and the surface stays
-   * inside the projector's area (nothing outside it can be lit anyway).
+   * (every photo pixel lands on the projector pixel that lit it), then
+   * pick shapes in it.
    */
-  const projectOntoWall = async (asset: MediaAsset, frameInPhoto: CornerSet): Promise<void> => {
-    setProjecting(true)
+  const continueToShapes = async (session: CaptureSession, asset: MediaAsset, detect: FoundFrame): Promise<void> => {
+    setFitting(true)
     setNotice(null)
     try {
-      const fitted = await window.mirrorcat.capture.rectify(asset.id, frameInPhoto)
-      const scene = store.getState()
-      const id = scene.addSurface('Scan')
-      scene.setSurfaceAsset(id, fitted.id)
-      scene.updateCorners(id, FULL_FRAME.map((c) => ({ ...c })) as CornerSet)
-      scene.updateSurfaceSettings(id, { fit: 'stretch', warp: 'perspective' })
-      onProjected(id)
-      onClose()
+      const fitted = await window.mirrorcat.capture.rectify(asset.id, detect.corners)
+      setPhase({ kind: 'shapes', session, asset, detect, fitted })
     } catch (error) {
       console.error('[scan] could not fit the photo', error)
       setNotice('Those corners don’t make a frame shape. Move them onto the frame’s corners and try again.')
-      setProjecting(false)
+    } finally {
+      setFitting(false)
     }
+  }
+
+  /** A new surface filling the frame, showing the whole fitted photo. */
+  const projectWhole = (fitted: MediaAsset): void => {
+    const scene = store.getState()
+    const id = scene.addSurface('Scan')
+    scene.setSurfaceAsset(id, fitted.id)
+    scene.updateCorners(id, FULL_FRAME.map((c) => ({ ...c })) as CornerSet)
+    scene.updateSurfaceSettings(id, { fit: 'stretch', warp: 'perspective' })
+    onProjected(id)
+    onClose()
   }
 
   const takeAnother = (session: CaptureSession): void => {
@@ -208,7 +215,52 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
     )
   }
 
-  const minutes = Math.round(CAPTURE_SESSION_MS / 60000)
+  const header = (title: string, extra?: ReactNode): ReactNode => (
+    <header className="settings-header">
+      <h1 id="scan-title">{title}</h1>
+      <div className="scan-header-tools">
+        {extra}
+        <button type="button" className="icon-btn" onClick={onClose} aria-label="Close scan">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </button>
+      </div>
+    </header>
+  )
+
+  const frame = (size: '' | 'wide' | 'shapes', children: ReactNode): ReactNode => (
+    <div className="settings-backdrop" onMouseDown={handleBackdropMouseDown}>
+      <div
+        ref={dialogRef}
+        className={`scan-dialog${size ? ` scan-dialog-${size}` : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="scan-title"
+        tabIndex={-1}
+        onKeyDown={handleKeyDown}
+      >
+        {children}
+      </div>
+    </div>
+  )
+
+  if (phase.kind === 'shapes') {
+    return frame(
+      'shapes',
+      <ShapesStep
+        key={phase.fitted.id}
+        fitted={phase.fitted}
+        header={(extra) => header('Pick the shapes', extra)}
+        onBack={() => setPhase({ kind: 'photo', session: phase.session, asset: phase.asset, detect: phase.detect })}
+        onProjectWhole={() => projectWhole(phase.fitted)}
+        onMade={(first) => {
+          if (first) onProjected(first)
+          onClose()
+        }}
+      />
+    )
+  }
 
   if (phase.kind === 'photo') {
     const detect = phase.detect
@@ -226,181 +278,151 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
               ? `Found ${found} of 4 corner markers. Check the highlighted corner${4 - found > 1 ? 's' : ''}.`
               : 'Found the projector frame. Check that the outline sits on its corners.'
 
-    return (
-      <div className="settings-backdrop" onMouseDown={handleBackdropMouseDown}>
-        <div
-          ref={dialogRef}
-          className="scan-dialog scan-dialog-wide"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="scan-title"
-          tabIndex={-1}
-          onKeyDown={handleKeyDown}
-        >
-          <header className="settings-header">
-            <h1 id="scan-title">{detect.state === 'off' ? 'Photo received' : 'Line up the photo'}</h1>
-            <button type="button" className="icon-btn" onClick={onClose} aria-label="Close scan">
-              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
-            </button>
-          </header>
-          <div className="scan-body scan-photo">
-            {detect.state === 'done' ? (
-              <FrameCornersEditor
-                imageUrl={mediaUrl(phase.asset.id)}
-                corners={detect.corners}
-                onChange={setCorners}
-                unsure={result?.corners ? unsure : [0, 1, 2, 3]}
-              />
-            ) : (
-              <img
-                className={`scan-photo-image${detect.state === 'finding' ? ' finding' : ''}`}
-                src={mediaUrl(phase.asset.id)}
-                alt="The photo from your phone"
-              />
-            )}
+    return frame(
+      'wide',
+      <>
+        {header(detect.state === 'off' ? 'Photo received' : 'Line up the photo')}
+        <div className="scan-body scan-photo">
+          {detect.state === 'done' ? (
+            <FrameCornersEditor
+              imageUrl={mediaUrl(phase.asset.id)}
+              corners={detect.corners}
+              onChange={setCorners}
+              unsure={result?.corners ? unsure : [0, 1, 2, 3]}
+            />
+          ) : (
+            <img
+              className={`scan-photo-image${detect.state === 'finding' ? ' finding' : ''}`}
+              src={mediaUrl(phase.asset.id)}
+              alt="The photo from your phone"
+            />
+          )}
 
-            {status && (
-              <p
-                className={`scan-status${result && !result.corners ? ' warn' : ''}`}
-                role="status"
+          {status && (
+            <p className={`scan-status${result && !result.corners ? ' warn' : ''}`} role="status">
+              {status}
+            </p>
+          )}
+          {detect.state === 'off' && (
+            <p className="scan-note">
+              Saved to your library as “{phase.asset.name}”. Go live before scanning and the projector shows a frame
+              to line photos up with the wall.
+            </p>
+          )}
+          {notice && (
+            <p className="scan-status error" role="alert">
+              {notice}
+            </p>
+          )}
+
+          <div className="scan-actions">
+            {detect.state === 'done' && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => void continueToShapes(phase.session, phase.asset, detect)}
+                disabled={fitting}
+                title="Fit the photo to the projector, then pick the shapes to map"
               >
-                {status}
-              </p>
-            )}
-            {detect.state === 'off' && (
-              <p className="scan-note">
-                Saved to your library as “{phase.asset.name}”. Go live before scanning and the
-                projector shows a frame to line photos up with the wall.
-              </p>
-            )}
-            {notice && (
-              <p className="scan-status error" role="alert">
-                {notice}
-              </p>
-            )}
-
-            <div className="scan-actions">
-              {detect.state === 'done' && (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => void projectOntoWall(phase.asset, detect.corners)}
-                  disabled={projecting}
-                  title="Fit the photo to the projector and show it exactly where it was taken"
-                >
-                  {projecting ? 'Fitting to the projector…' : 'Project onto the wall'}
-                </button>
-              )}
-              {surface && (
-                <button
-                  type="button"
-                  className={detect.state === 'off' ? 'btn' : 'btn btn-ghost'}
-                  onClick={() => putOnSurface(phase.asset)}
-                >
-                  Put on {surface.name}
-                </button>
-              )}
-              <button type="button" className="btn btn-ghost" onClick={() => takeAnother(phase.session)}>
-                Take another
+                {fitting ? 'Fitting to the projector…' : 'Continue'}
               </button>
-            </div>
+            )}
+            {surface && (
+              <button
+                type="button"
+                className={detect.state === 'off' ? 'btn' : 'btn btn-ghost'}
+                onClick={() => putOnSurface(phase.asset)}
+              >
+                Put on {surface.name}
+              </button>
+            )}
+            <button type="button" className="btn btn-ghost" onClick={() => takeAnother(phase.session)}>
+              Take another
+            </button>
           </div>
         </div>
-      </div>
+      </>
     )
   }
 
-  return (
-    <div className="settings-backdrop" onMouseDown={handleBackdropMouseDown}>
-      <div
-        ref={dialogRef}
-        className="scan-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="scan-title"
-        tabIndex={-1}
-        onKeyDown={handleKeyDown}
-      >
-        <header className="settings-header">
-          <h1 id="scan-title">Scan with your phone</h1>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Close scan">
-            <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </button>
-        </header>
+  const minutes = Math.round(CAPTURE_SESSION_MS / 60000)
 
-        <div className="scan-body">
-          <div className="scan-code" aria-live="polite">
-            {phase.kind === 'waiting' ? (
-              <img
-                className="scan-qr"
-                src={`data:image/svg+xml;utf8,${encodeURIComponent(phase.session.qrSvg)}`}
-                alt={`QR code for ${phase.session.url}`}
-              />
-            ) : (
-              <div className="scan-qr-placeholder">
-                {phase.kind === 'starting' && <span className="scan-spinner" aria-hidden="true" />}
-              </div>
-            )}
-          </div>
+  return frame(
+    '',
+    <>
+      {header('Scan with your phone')}
+      <div className="scan-body">
+        <div className="scan-code" aria-live="polite">
+          {phase.kind === 'waiting' ? (
+            <img
+              className="scan-qr"
+              src={`data:image/svg+xml;utf8,${encodeURIComponent(phase.session.qrSvg)}`}
+              alt={`QR code for ${phase.session.url}`}
+            />
+          ) : (
+            <div className="scan-qr-placeholder">
+              {phase.kind === 'starting' && <span className="scan-spinner" aria-hidden="true" />}
+            </div>
+          )}
+        </div>
 
-          <div className="scan-side">
-            <ol className="scan-steps">
-              <li>Point your phone’s camera at the code.</li>
-              <li>
-                {live
-                  ? 'Stand beside the projector and fit the whole glowing frame in the photo.'
-                  : 'Stand beside the projector and take the photo.'}
-              </li>
-              <li>{live ? 'Check the frame MirrorCat finds, then project it.' : 'It shows up here, and in your library.'}</li>
-            </ol>
+        <div className="scan-side">
+          <ol className="scan-steps">
+            <li>Point your phone’s camera at the code.</li>
+            <li>
+              {live
+                ? 'Stand beside the projector and fit the whole glowing frame in the photo.'
+                : 'Stand beside the projector and take the photo.'}
+            </li>
+            <li>
+              {live
+                ? 'Check the frame MirrorCat finds, then pick the shapes to map.'
+                : 'It shows up here, and in your library.'}
+            </li>
+          </ol>
 
-            <p
-              className={`scan-status${phase.kind === 'error' || phase.kind === 'expired' ? ' error' : ''}`}
-              role="status"
-            >
-              {phase.kind === 'waiting' && (
-                <span className={`scan-dot${phase.phone === 'none' ? ' waiting' : ''}`} aria-hidden="true" />
-              )}
-              {phase.kind === 'starting' && 'Opening a link…'}
-              {phase.kind === 'waiting' &&
-                (phase.phone === 'none'
-                  ? 'Waiting for your phone'
-                  : phase.phone === 'connected'
-                    ? 'Phone connected. Take the photo when you’re ready.'
-                    : 'Receiving the photo…')}
-              {phase.kind === 'error' && phase.message}
-              {phase.kind === 'expired' && 'This link has expired.'}
-            </p>
-            {notice && phase.kind === 'waiting' && (
-              <p className="scan-status error" role="alert">
-                {notice}
-              </p>
-            )}
-
-            {(phase.kind === 'error' || phase.kind === 'expired') && (
-              <button type="button" className="btn scan-retry" onClick={() => void start()}>
-                {phase.kind === 'expired' ? 'New link' : 'Try again'}
-              </button>
-            )}
-
+          <p
+            className={`scan-status${phase.kind === 'error' || phase.kind === 'expired' ? ' error' : ''}`}
+            role="status"
+          >
             {phase.kind === 'waiting' && (
-              <p className="scan-note">
-                {live
-                  ? 'The projector is showing the scan frame. '
-                  : 'Go live first and the projector shows a frame to line the photo up with. '}
-                Your phone needs to be on the same Wi-Fi; the link works for {minutes} minutes:{' '}
-                <span className="scan-url" title={`On ${phase.session.interfaceName}`}>
-                  {phase.session.url.replace(/^http:\/\//, '')}
-                </span>
-              </p>
+              <span className={`scan-dot${phase.phone === 'none' ? ' waiting' : ''}`} aria-hidden="true" />
             )}
-          </div>
+            {phase.kind === 'starting' && 'Opening a link…'}
+            {phase.kind === 'waiting' &&
+              (phase.phone === 'none'
+                ? 'Waiting for your phone'
+                : phase.phone === 'connected'
+                  ? 'Phone connected. Take the photo when you’re ready.'
+                  : 'Receiving the photo…')}
+            {phase.kind === 'error' && phase.message}
+            {phase.kind === 'expired' && 'This link has expired.'}
+          </p>
+          {notice && phase.kind === 'waiting' && (
+            <p className="scan-status error" role="alert">
+              {notice}
+            </p>
+          )}
+
+          {(phase.kind === 'error' || phase.kind === 'expired') && (
+            <button type="button" className="btn scan-retry" onClick={() => void start()}>
+              {phase.kind === 'expired' ? 'New link' : 'Try again'}
+            </button>
+          )}
+
+          {phase.kind === 'waiting' && (
+            <p className="scan-note">
+              {live
+                ? 'The projector is showing the scan frame. '
+                : 'Go live first and the projector shows a frame to line the photo up with. '}
+              Your phone needs to be on the same Wi-Fi; the link works for {minutes} minutes:{' '}
+              <span className="scan-url" title={`On ${phase.session.interfaceName}`}>
+                {phase.session.url.replace(/^http:\/\//, '')}
+              </span>
+            </p>
+          )}
         </div>
       </div>
-    </div>
+    </>
   )
 }

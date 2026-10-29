@@ -9,9 +9,11 @@ import { CaptureServer } from '../capture/captureServer'
 import { pickLanAddress, type LanAddress } from '../capture/lanAddress'
 import { getControlWindow } from '../windows/controlWindow'
 import { getOutputWindow } from '../windows/outputWindow'
-import { bgraToRgba, detectSize, locateFrame } from '../capture/frameDetect'
+import { bgraToRgba, detectSize } from '../capture/frameDetect'
 import { rectifiedSize, rectifyQuad } from '../capture/rectify'
-import type { CornerSet } from '../../shared/types'
+import { parseCorners } from './validate'
+import { vision } from '../segment/vision'
+import { stopShapeFinder } from './shapeHandlers'
 import { requireControlWindow } from './trust'
 
 let active: CaptureServer | null = null
@@ -27,25 +29,11 @@ function showPattern(on: boolean): void {
 function stopActive(): void {
   active?.stop()
   active = null
+  stopShapeFinder()
   if (patternOn) showPattern(false)
 }
 
 const NO_FRAME: FrameDetection = { corners: null, markersFound: [], estimated: true }
-
-/** Four finite corners within a sane range (an image can sit well past the frame). */
-function parseCorners(value: unknown): CornerSet | null {
-  if (!Array.isArray(value) || value.length !== 4) return null
-  const ok = value.every(
-    (c) =>
-      c &&
-      typeof c === 'object' &&
-      Number.isFinite((c as { x: number }).x) &&
-      Number.isFinite((c as { y: number }).y) &&
-      Math.abs((c as { x: number }).x) < 100 &&
-      Math.abs((c as { y: number }).y) < 100
-  )
-  return ok ? (value.map((c) => ({ x: c.x, y: c.y })) as CornerSet) : null
-}
 
 function positiveInt(value: unknown, fallback: number): number {
   return Number.isInteger(value) && (value as number) > 0 && (value as number) <= 16384
@@ -69,6 +57,7 @@ function captureAddress(): LanAddress | null {
  * editor's Scan dialog; the server never outlives the dialog or the editor.
  */
 export function registerCaptureHandlers({ library }: { library: MediaLibrary }): void {
+
   const send = (event: CaptureEvent): void => {
     const win = getControlWindow()
     if (win && !win.isDestroyed()) win.webContents.send(IpcChannels.CaptureEvent, event)
@@ -126,9 +115,9 @@ export function registerCaptureHandlers({ library }: { library: MediaLibrary }):
     return true
   })
 
-  // Finds the projector frame in a scan photo. Runs on the main thread:
-  // ~0.3 s for a 1600 px scan, once per photo (a worker is a follow-up).
-  ipcMain.handle(IpcChannels.CaptureDetectFrame, (event, id: unknown): FrameDetection => {
+  // Finds the projector frame in a scan photo, in the vision process
+  // (~0.3 s for a 1600 px scan; main only decodes the photo).
+  ipcMain.handle(IpcChannels.CaptureDetectFrame, async (event, id: unknown): Promise<FrameDetection> => {
     requireControlWindow(event)
     const asset = typeof id === 'string' && ASSET_ID_PATTERN.test(id) ? library.get(id) : undefined
     const out = getOutputWindow()
@@ -140,7 +129,7 @@ export function registerCaptureHandlers({ library }: { library: MediaLibrary }):
     const size = detectSize(image.getSize().width, image.getSize().height)
     const pixels = bgraToRgba(image.resize({ ...size, quality: 'good' }).toBitmap())
     try {
-      return locateFrame(pixels, size.width, size.height, frameWidth, frameHeight)
+      return await vision.locateFrame(pixels, size.width, size.height, frameWidth, frameHeight)
     } catch (error) {
       console.error('[capture] frame detection failed', error)
       return NO_FRAME

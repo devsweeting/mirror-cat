@@ -607,3 +607,193 @@ projector)" image and re-projects the markers onto their own pixels;
 an oversized surface shows pinned corners and the note, and Fit to the
 frame fixes it).
 
+## 031 Shapes found in a scan become surfaces (built-in finder first, SAM 2 later)
+*2026-10-28 · Accepted*
+
+**Context.** A lined-up scan is in projector space, so anything outlined in
+it is already a set of surface corners. Devin wants MirrorCat to find the
+shapes in the photo and let you assign each to a surface, then fill them
+with your own content (and later, generated content).
+
+**Decision.**
+- After **Continue** on the line-up step, the photo is fitted to the frame
+  and `capture:find-shapes` looks for shapes in it
+  (`main/capture/shapeDetect.ts`). **Pick the shapes** outlines them over
+  the photo, numbered in reading order, all picked by default. Clicking a
+  shape (or its row) toggles it. Each row says where it goes: **New
+  surface** or **Move <surface> here** (it keeps its content; one surface
+  per shape).
+- **Make N surfaces**: a four-sided shape becomes a perspective surface
+  with exactly its corners and no mask. Any other shape gets a rectangle
+  fitted around it (padded a few pixels) plus an exact mask, cut in main
+  from the shape's own pixels (`capture:shape-mask` → mask store). Old
+  edge nodes and masks are cleared. **Project the whole photo** is the
+  old behaviour.
+- Built-in finder (stage 1). Runs at 640 px on the main thread, ~50–150
+  ms. It makes three passes: faces between Sobel edges, then brighter and
+  darker than Otsu. Each pass yields connected regions, which are kept
+  when they're 0.4–80% of the frame, touch at most one side and sit clear
+  of the pattern's markers. Holes are filled, the outline is traced and
+  convex-hulled, and regions with solidity ≥ 0.6 are kept. A
+  Douglas–Peucker four-point fit, with sides refit by least squares, makes
+  it a quad if it covers 92–110% of the hull. Duplicates across passes
+  merge at IoU 0.7, preferring quads. At most 16.
+- The picker only needs regions, so SAM 2 (stage 2) can plug in behind
+  the same IPC.
+
+**Considered.**
+- SAM 2 now. It covers organic and low-contrast shapes, but it costs a
+  ~150 MB model, onnxruntime and 5–20 s per photo on CPU. It's staged
+  after this, behind the same picker.
+- Outline polygons for masks. A hull loses concave shapes; region pixels
+  are exact and match what SAM 2 outputs.
+- Masks for quads too. Not needed, and they'd stop the corners being
+  freely editable.
+
+**Verified by** `shared/shapes.test.ts` (corner order, rounded-corner quad
+fit, min-area rectangle, frame → surface mapping, smallest-shape hit test),
+`main/capture/shapeDetect.test.ts` (synthetic walls: dark frame, angled
+low-contrast box face, round shape traced, frame + picture, markers and
+specks ignored, reading order, exact mask) and `e2e/scan.spec.ts` (a live
+scan with a frame and a round mirror: two shapes found, one moved onto an
+existing surface at the right corners with no mask, one new and masked).
+
+## 032 The detailed finder (SAM 2) and boxes around what you mean
+*2026-10-28 · Accepted*
+
+**Context.** Devin's first real shape scan offered the art inside a
+picture frame, not the frame, which ran off the bottom of the photo.
+Devin asked for SAM 2, and for a way to point the finder at an area.
+
+**Decision.**
+- **Frames cut off by the photo's edge.** When filling a region's holes,
+  box sides that are the photo's own edge count as closed, so a U-shaped
+  frame gets its middle. Duplicates now merge at IoU 0.88, not 0.7, so a
+  frame (~0.8 overlap with its picture) and the picture are both offered.
+- **Draw a box.** On *Pick the shapes*, a click picks; a drag (6 px or
+  more) draws a box (`capture:find-in-box`).
+  - With the detailed finder installed, SAM gets the box as its prompt.
+    The best-rated mask is clipped to the box (+3%) and fitted like any
+    shape. It may touch three sides of the photo and be loosely solid.
+  - Without it, the built-in finder picks the candidate, from any pass,
+    merged or not, whose bounds best match the box (IoU ≥ 0.5).
+  - A shape already in the list is picked instead of duplicated.
+- **Detailed finder = SAM 2.1 hiera-tiny**, from onnx-community's ONNX
+  export, pinned to revision `814a066…`. About 155 MB in four files, each
+  checked by SHA-256 while it streams, then renamed into
+  `userData/models/sam2.1-hiera-tiny`.
+  - Downloaded on demand from the picker (progress, Cancel; `sam:*` IPC,
+    Electron `net.fetch`).
+  - Runs in **onnxruntime-node inside an Electron `utilityProcess`**
+    (`main/segment/samWorker.ts`, bundled via `?modulePath`). The encoder
+    blocks its thread for ~2.5–3 s, which would freeze main. A native
+    crash only kills the worker.
+  - The worker holds one photo's features; it's stopped when the Scan
+    dialog closes.
+  - Input: the fitted photo squashed to 1024² (not padded),
+    ImageNet-normalized.
+  - The decoder answers a box or point in ~60–110 ms with 3 masks (256²
+    logits), sampled bilinearly to the finder's size (`samMasks.ts`).
+- **Find more shapes:** a ~10×6 point grid over the frame (~6 s). It keeps
+  masks with predicted IoU ≥ 0.7, stability ≥ 0.85 and an object score
+  above 0. Answers over half the frame (the wall) are dropped. Up to 16
+  new shapes, added unpicked.
+- **Packaging.** `asarUnpack: node_modules/onnxruntime-node/**`.
+
+**Considered.**
+- onnxruntime-web in the renderer (WASM/WebGPU). That needs
+  `'wasm-unsafe-eval'` in the CSP and model files served to the page;
+  native CPU is faster.
+- Running ORT on main's thread: it blocks the event loop (measured: no
+  timer ticks for 3 s).
+- Other ONNX exports: unpinned re-uploads, zips, or `.ort`-only.
+- Batched point prompts: the export fixes one object per call, and
+  batching would copy 16 MB of features each time.
+- Fp16 or int8 encoders (smaller): kept fp32 for mask quality on CPU.
+
+**Verified by** `shapeDetect.test.ts`: a frame cut off by the bottom edge
+plus its picture; masks to candidates; new vs. existing; a box picks the
+frame or the picture. `samModel.test.ts`: pinned URLs, checksum failures
+leave nothing behind, retries resume. `samMasks.test.ts`: normalization,
+logit upsampling, stability, grid. `e2e/scan.spec.ts`: a box around a
+frame picks the frame with the built-in finder; with the real model (run
+only where it's downloaded), Find more completes and a box on the frame
+gives its corners within 3%. On Devin's own photo the frame now comes
+back as a quad at its true corners.
+
+## 033 Scan, refined: Cat talks you through it, shapes combine, everything has a key
+*2026-10-28 · Accepted*
+
+**Context.** Devin asked for a pass on the scan experience. He wanted
+tooltips with keyboard commands, clearer ways to combine and create
+shapes, a design pass, and a code-quality and performance review. On the
+phone, he wanted Cat's eyes first and prominent, talking you through the
+photo.
+
+**Decision.**
+- **Phone page.** Cat's eyes lead: big, glowing, the same shapes as the
+  editor's. The instructions are lines Cat says, in its own voice ("Hi,
+  I'm Cat…").
+  - On load, one ~4 s sequence: each line fades in while the eyes squint
+    and glance where it matters (to the side for "next to the
+    projector", down for "hold level", up for "the whole frame").
+  - The eyes then react to what happens: they dart while sending, turn
+    into happy arcs when the photo is in, and tilt wide on an error.
+    Tapping the eyes replays the lines.
+  - The expired page shows shut eyes ("gone to sleep").
+  - Everything stays inside the nonce CSP: no inline style attributes.
+    Reduced motion gets everything at once.
+- **Pick the shapes.**
+  - Picked shapes are lit: an amber line with a glow, as if the
+    projector were already on them.
+  - Under the photo, three gestures, each with the mark it makes: click to
+    pick, drag to draw, pick two or more to combine.
+  - A selection bar floats on the photo, with Combine, Remove and Undo.
+  - Shapes are numbered by list position, so 1–9 match the keys.
+- **Combine** (`capture:combine-shapes`, `combineShapes`) joins the
+  shapes' pixels and fits them afresh. Two halves of a door become a quad;
+  pieces that don't touch become one traced shape with several rings
+  (`DetectedShape.rings`). The parts stay in main's scan, so undo
+  (renderer history, 20 steps) can restore them. A box drawn on a removed
+  shape brings it back (`BoxResult.existing` now carries the shape).
+- **Keys:** 1–9 pick, ⌘A all, ⌘D none, C combine, ⌫ remove, ⌘Z undo,
+  F find more, ↵ make surfaces, Esc cancels a box (then closes), ? lists
+  them.
+  - `Tooltip` shows a label plus keycaps: in a portal, after 350 ms on
+    hover, at once on keyboard focus. It wraps the control in a
+    `display: contents` span and sets `aria-describedby` on it.
+  - Keys are ignored while typing or in a select.
+- **Performance.** One **vision process** (`visionWorker.ts`, a
+  `utilityProcess`) now runs frame detection, shape finding and SAM; main
+  only decodes images. onnxruntime loads only when SAM is first used.
+  - "Find more" filters SAM's answers inside the worker, so only the
+    useful masks cross over.
+  - With the detailed finder installed, SAM starts reading the photo as
+    soon as shapes are found. A box joins that read rather than starting
+    a second one.
+  - The scan is freed when the dialog closes.
+- **Code.**
+  - `ScanDialog` (680 lines) is split into a shared dialog frame and
+    `ShapesStep`, which owns the picker's state, undo and keys.
+  - Validators shared in `ipc/validate.ts`; `vision.ts` holds the one
+    client and the model path.
+  - Undo history no longer updates inside a state updater, which
+    StrictMode runs twice.
+
+**Considered.**
+- Chat bubbles on the phone (reads like a messaging app), and a typing
+  effect (slows people down). Kept lines plus eyes.
+- A tool switcher (pick / draw / combine modes): gestures plus the
+  selection bar are fewer clicks.
+- Making combine permanent in main: keeping the parts makes undo
+  trivial.
+- `cloneElement` for tooltips: React 19's lint treats reading
+  `children.props` as possible ref access.
+
+**Verified by** `shapeDetect.test.ts`, which combines door halves into a
+quad, keeps separate pieces as rings, and refuses fewer than two known
+shapes. `e2e/scan.spec.ts` covers picking by key, the Combine tooltip
+showing C, C combines, Undo, ⌫ then ⌘Z, the ? list, and Esc closing only
+the list. The phone page was rendered at 390×844 through each state with
+no CSP errors.
+

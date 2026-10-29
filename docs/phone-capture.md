@@ -9,8 +9,10 @@ removal, and the mask that already lines up (step 1, decision 024).
 
 1. **Scan** in the top bar opens a dialog with a QR code.
 2. The phone's camera reads it and opens a page served by MirrorCat on the
-   home network. The page says where to stand (beside the projector, 1×
-   lens, whole object in frame) and has one button: Take photo.
+   home network. Cat's eyes talk you through it, one line at a time:
+   stand next to the projector, use the 1× lens, fit the glowing frame
+   in. One button: Take photo. The eyes react while it sends, when it's
+   in, and when something goes wrong (decision 033).
 3. The photo arrives in the media library ("Scan Oct 28, 2026, 7:19 PM").
    The dialog shows it with **Put on <surface>**, **Take another** and
    **Done**.
@@ -58,6 +60,34 @@ When the photo arrives:
 
 Not live: no pattern, and the photo can go on a surface as-is.
 
+## Shapes → surfaces
+
+After lining up, **Continue** fits the photo to the projector and finds
+the shapes in it (decision 031). **Pick the shapes** shows them outlined
+and numbered. Click one, or its row, to pick it. Each picked shape goes to
+a **New surface** or onto an existing one (**Move Vase here**).
+
+- **Make N surfaces** puts the corners in place.
+  - Four-sided shapes (frames, doors, box faces) get exactly their corners.
+  - Anything else gets a rectangle around it plus an exact mask.
+- Then drop your own content on each surface.
+- **Project the whole photo** is still there for using the photo itself.
+
+**Combine** two or more picked shapes into one (C), for example the two
+halves of a door, or a lamp's shade and base. **Remove** the ones you
+don't want (⌫), and undo either (⌘Z). Shapes are numbered so 1–9 pick
+them; ? lists every key, and each button's tooltip shows its key.
+
+**Drag a box** around anything it missed, or around the thing you mean
+when it picked the wrong part (the frame, not the picture in it). The
+shape in the box is added and picked.
+
+The built-in finder handles flat, solid, reasonably high-contrast shapes.
+The **detailed finder** (SAM 2, decision 032) is a one-time ~155 MB
+download from the picker that runs on this computer. Once it's installed,
+**Find more shapes** looks for curved, organic and low-contrast shapes
+(~6 s), and boxes use it for exact outlines.
+
 ## How it's built
 
 | Piece | Where |
@@ -68,6 +98,10 @@ Not live: no pattern, and the photo can go on a surface as-is.
 | IPC | `main/ipc/captureHandlers.ts` -- `capture:start` / `capture:stop` (control window only), `capture:event` to the editor |
 | QR code | `qrcode` (MIT), rendered as SVG in main, shown as a data: image |
 | Dialog | `renderer/components/ScanDialog.tsx`, `FrameCornersEditor.tsx`, `styles/scan.css` |
+| Detailed finder (SAM 2) | `main/segment/` -- `samModel.ts` (pinned download + checksums), `samWorker.ts` (onnxruntime-node in a utilityProcess), `samClient.ts`, `samMasks.ts`; `main/ipc/shapeHandlers.ts`; `components/DetailedFinder.tsx` |
+| Vision process | `main/segment/visionWorker.ts` (frame + shape finding + SAM, in a utilityProcess), `visionClient.ts`, `vision.ts` |
+| Picker | `components/ShapesStep.tsx` (state, undo, keys), `ShapePicker.tsx`, `Tooltip.tsx`, `lib/keys.ts` |
+| Shape finding | `shared/shapes.ts` (geometry), `main/capture/shapeDetect.ts` (regions, quads, masks), `components/ShapePicker.tsx`; IPC `capture:find-shapes`, `capture:shape-mask` |
 | Scan pattern + frame detection | `shared/scanPattern.ts`, `shared/homography.ts`, `main/capture/frameDetect.ts`, `components/ScanPattern.tsx` (projector) |
 
 **Why a file input, not a live camera view.** `getUserMedia` needs a
@@ -118,7 +152,9 @@ have no Wi-Fi.
 
 ## Next
 
-- Tap-to-select (SAM 2) on the photo, writing the selection into the
-  surface's mask through the same photo → frame mapping.
-- Run frame detection in a worker (it's ~0.3 s on the main thread today).
+- Merge shapes the finders split; click-to-refine a SAM outline (add or
+  remove points).
+- GPU for the detailed finder (CoreML / DirectML execution providers).
+- Generative content per shape: the photo crop and the shape's mask as
+  the prompt's canvas.
 - Later: Gray-code structured light for a per-pixel fit.

@@ -82,7 +82,7 @@ describe('CaptureServer', () => {
 
     const page = await call(url)
     expect(page.status).toBe(200)
-    expect(page.body).toContain('Photo for MirrorCat')
+    expect(page.body).toContain('Cat’s camera')
     const csp = String(page.headers['content-security-policy'])
     const nonce = /'nonce-([^']+)'/.exec(csp)![1]
     expect(page.body).toContain(`<script nonce="${nonce}">`)
@@ -92,7 +92,7 @@ describe('CaptureServer', () => {
 
     const wrong = await call(url.replace(/\/c\/.+$/, '/c/' + 'x'.repeat(22)))
     expect(wrong.status).toBe(404)
-    expect(wrong.body).toContain('isn’t active')
+    expect(wrong.body).toContain('gone to sleep')
     expect((await call(url.replace(/\/c\/.+$/, '/'))).status).toBe(404)
   })
 

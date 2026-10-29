@@ -6,6 +6,9 @@ directories:
 files:
   - out/**/*
   - package.json
+# The shape finder's native runtime can't load from inside app.asar.
+asarUnpack:
+  - node_modules/onnxruntime-node/**
 mac:
   category: public.app-category.graphics-design
   target: dmg
