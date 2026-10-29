@@ -11,6 +11,7 @@ import {
 } from '@shared/surfaceGeometry'
 import SurfaceContentControls from './SurfaceContentControls'
 import SurfaceMaskControls from './SurfaceMaskControls'
+import ToggleSwitch from './ToggleSwitch'
 
 const WARP_OPTIONS: { value: WarpMode; label: string; title: string }[] = [
   {
@@ -46,10 +47,10 @@ interface SurfaceSettingsDrawerProps {
 
 /**
  * Per-surface settings, ordered by how often you reach for them while
- * working: what's on the surface, its mask, the alignment grid, opacity.
- * How the content bends (warp mode, edge points) is folded into "Shape",
- * since corners and double-clicking the outline on the stage do most of
- * that work. Name, outline color and delete live in the row's "…" menu
+ * working: what's on the surface, the alignment grid, opacity. The mask
+ * and how the content bends (warp mode, edge points) are folded into
+ * dropdowns whose headers summarize them -- corners, M and double-clicking
+ * the outline on the stage do most of that work. Name, outline color and delete live in the row's "…" menu
  * (SurfaceMenu).
  */
 export default function SurfaceSettingsDrawer({ surface, onFocusSurface }: SurfaceSettingsDrawerProps) {
@@ -77,30 +78,15 @@ export default function SurfaceSettingsDrawer({ surface, onFocusSurface }: Surfa
     <div className="surface-drawer">
       <SurfaceContentControls surface={surface} onFocusSurface={onFocusSurface} />
 
-      <SurfaceMaskControls surface={surface} />
-
       <div className="drawer-group">
         <div className="drawer-row">
           <span className="drawer-label">Grid</span>
-          <div className="segmented" role="radiogroup" aria-label="Alignment grid">
-            <button
-              type="button"
-              role="radio"
-              aria-checked={!surface.showGrid}
-              onClick={() => updateSurfaceSettings(surface.id, { showGrid: false })}
-            >
-              Off
-            </button>
-            <button
-              type="button"
-              role="radio"
-              aria-checked={surface.showGrid}
-              title="Show an alignment grid here and on the projector"
-              onClick={() => updateSurfaceSettings(surface.id, { showGrid: true })}
-            >
-              On
-            </button>
-          </div>
+          <ToggleSwitch
+            checked={surface.showGrid}
+            onChange={(showGrid) => updateSurfaceSettings(surface.id, { showGrid })}
+            label="Alignment grid"
+            title="Show an alignment grid here and on the projector"
+          />
         </div>
 
         <div className="drawer-row drawer-inline-slider">
@@ -123,6 +109,8 @@ export default function SurfaceSettingsDrawer({ surface, onFocusSurface }: Surfa
           <span className="drawer-value num">{opacityPct}%</span>
         </div>
       </div>
+
+      <SurfaceMaskControls surface={surface} />
 
       <div className="drawer-section">
         <button

@@ -484,3 +484,24 @@ moving the color into the visibility dot (overloads a toggle).
 **Verified by** `e2e/drawer.spec.ts` (folded Shape, summary updates, row
 menu rename / recolor / delete) and `e2e/grid.spec.ts`.
 
+## 027 Mask settings in a dropdown; on/off settings are switches
+*2026-10-28 · Accepted*
+
+**Decision.** All mask settings fold into a "Mask" dropdown in the drawer,
+below Grid and Opacity and above Shape, with a summary header ("None",
+"On, inverted, soft 4.0%", "Editing on the stage"). It opens by itself
+while the mask is being edited and remembers its state. Inside: the well,
+Edge, Grow, Invert, and quiet text actions (use / replace with an image,
+light only the image, remove). The separate "…" options popover is gone.
+A cut-out suggestion or an error still shows while it's closed.
+
+On/off settings (Grid, Invert) use `ToggleSwitch`: it keeps the Off | On
+look but is a single `role="switch"` button, so clicking anywhere on it --
+including the side that's already active -- flips it, and the highlight
+slides across. Two-option choices with named values (Perspective / Even,
+Outline / Brush, Light / Dark, Fit) stay segmented radio groups, where
+clicking the active option should do nothing.
+
+**Verified by** `e2e/drawer.spec.ts` (switch flips from either half and
+with Space; mask summarized while folded) and `e2e/mask.spec.ts`.
+

@@ -53,6 +53,9 @@ test('outline an object, touch it up with the brush, tune and remove the mask', 
   const { page, userData, problems } = launched
   await page.locator('.surface-header', { hasText: 'Box' }).click()
   const drawer = page.locator('.surface-drawer')
+  const section = drawer.getByRole('button', { name: /^Mask / })
+  await expect(section).toContainText('None')
+  await section.click()
   await expect(drawer.getByRole('button', { name: 'Edit the mask on the stage' })).toContainText(
     'Mask this surface'
   )
@@ -99,23 +102,17 @@ test('outline an object, touch it up with the brush, tune and remove the mask', 
   await expect(drawer.locator('.mask-well img')).toBeVisible()
   expect(await readdir(join(userData, 'masks'))).toContain(`${firstId}.png`)
 
-  // Edge softness in the drawer; invert in the options.
+  // Edge softness and invert, right in the dropdown.
   await drawer.getByLabel('Edge softness').fill('4')
-  await drawer.getByRole('button', { name: 'Mask options' }).click()
-  const options = drawer.getByRole('dialog', { name: 'Mask options' })
-  await options
-    .getByRole('radiogroup', { name: 'Invert mask' })
-    .getByRole('radio', { name: 'On' })
-    .click()
+  await drawer.getByRole('switch', { name: 'Invert mask' }).click()
   await expect.poll(() => savedMask(userData)).toMatchObject({ invert: true, feather: 0.04 })
-  await page.keyboard.press('Escape')
-  await expect(options).toHaveCount(0)
+  await expect(section).toContainText('On, inverted, soft 4.0%')
   await page.waitForTimeout(200)
   await page.screenshot({ path: 'test-results/mask-inverted-soft.png' })
 
-  await drawer.getByRole('button', { name: 'Mask options' }).click()
-  await options.getByRole('button', { name: 'Remove mask' }).click()
+  await drawer.getByRole('button', { name: 'Remove mask' }).click()
   await expect(drawer.locator('.mask-well img')).toHaveCount(0)
+  await expect(section).toContainText('None')
   await expect.poll(() => savedMask(userData)).toBeNull()
 
   expect(problems).toEqual([])
@@ -144,6 +141,7 @@ test('an image dropped on the mask well is saved and comes back after a relaunch
     const { page } = first
     await page.locator('.surface-header', { hasText: 'Box' }).click()
     const drawer = page.locator('.surface-drawer')
+    await drawer.getByRole('button', { name: /^Mask / }).click()
     const png = await cutoutPng(page)
     await page.locator('.mask-well').evaluate((well, bytes) => {
       const data = new DataTransfer()
@@ -162,6 +160,7 @@ test('an image dropped on the mask well is saved and comes back after a relaunch
     userData = second.userData
     try {
       await second.page.locator('.surface-header', { hasText: 'Box' }).click()
+      // The dropdown remembers it was open.
       await expect(second.page.locator('.surface-drawer .mask-well img')).toBeVisible()
       expect((await savedMask(userData))!.id).toBe(saved.id)
       expect(await readdir(join(userData, 'masks'))).toEqual([`${saved.id}.png`])
@@ -195,7 +194,7 @@ test('a cut-out image on the surface offers to light only the image', async () =
     await expect(note).toContainText('transparent background')
     await note.getByRole('button', { name: 'Light only the image' }).click()
     await expect(note).toHaveCount(0)
-    await expect(drawer.locator('.mask-well img')).toBeVisible()
+    await expect(drawer.getByRole('button', { name: /^Mask / })).toContainText('On')
     await expect.poll(() => savedMask(userData)).not.toBeNull()
     await page.waitForTimeout(200)
     await page.screenshot({ path: 'test-results/mask-cutout.png' })

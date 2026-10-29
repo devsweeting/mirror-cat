@@ -261,15 +261,20 @@ The per-surface settings, ordered by how often you use them while working
 - Content (`SurfaceContentControls`): a preview row that opens a menu
   (Upload / Choose from library / Remove), plus Fit (Stretch / Fill) and
   Loop once there's media
-- Mask (`SurfaceMaskControls`): the mask well (click to edit on the
-  stage, drop an image), Edge softness, and a "…" popover for invert,
-  grow, replace and remove
-- Grid (Off / On) and Opacity (one line, slider filled in the surface
-  color)
+- Grid (a `ToggleSwitch`) and Opacity (one line, slider filled in the
+  surface color)
+- Mask (`SurfaceMaskControls`), a dropdown with a summary header: the
+  mask well (click to edit on the stage, drop an image), Edge, Grow,
+  Invert, and text actions for images and removal (decision 027)
 - Shape, collapsed by default with a summary ("Perspective, 4 points";
   open state remembered in localStorage): Warp (Perspective / Even) and
   the edge-point stepper, with an info icon for how-to. The non-convex
   fallback note shows even while collapsed.
+
+### `components/ToggleSwitch.tsx`
+On/off settings: looks like an Off | On segmented control, but it's one
+`role="switch"` button, so a click anywhere flips it and the highlight
+slides across. Named two-way choices stay segmented radio groups.
 
 ### `components/SurfaceMenu.tsx`
 The "…" on the open surface's row: name (saved on Enter, blur or closing),

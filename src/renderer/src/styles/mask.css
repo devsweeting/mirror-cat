@@ -3,13 +3,6 @@
    Stage: the mask layer (outline / brush).
    Under the stage: the mask bar, in the prompt bar's slot. */
 
-.mask-controls {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
 /* The well: the mask itself, and the way in. Dashed while there's no mask
    (an invitation), solid once there is. Doubles as a drop target. */
 .mask-well {
@@ -117,47 +110,6 @@
   font-size: var(--text-sm);
 }
 
-/* Options popover: reuses the content menu's surface. */
-.mask-options {
-  top: 28px;
-  left: auto;
-  right: -6px;
-  width: 232px;
-  gap: 2px;
-}
-
-.mask-option-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 30px;
-  padding: 0 9px;
-  font-size: var(--text-sm);
-}
-
-.mask-option-field {
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 6px;
-}
-
-.mask-option-field .slider {
-  width: auto;
-  margin: 0 9px;
-}
-
-.mask-option-divider {
-  height: 1px;
-  margin: 4px 0;
-  background: var(--seam);
-}
-
-.mask-options .segmented button {
-  height: 22px;
-  padding: 0 10px;
-  font-size: var(--text-xs);
-}
 
 .mask-error {
   color: var(--alert);
@@ -295,4 +247,44 @@
   .mask-well {
     transition: none;
   }
+}
+
+/* Actions at the bottom of the mask dropdown: quiet text buttons, since
+   they're rare and shouldn't compete with the well. */
+.mask-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+}
+
+.link-btn {
+  padding: 2px 0;
+  font-size: var(--text-sm);
+  color: var(--dusk);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.link-btn:hover:not(:disabled),
+.link-btn:focus-visible {
+  color: var(--plaster);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  outline: none;
+}
+
+.link-btn.danger:hover:not(:disabled),
+.link-btn.danger:focus-visible {
+  color: var(--alert);
+}
+
+.link-btn:disabled {
+  color: var(--shade);
+  cursor: default;
+}
+
+.mask-help-button {
+  margin-left: auto;
 }

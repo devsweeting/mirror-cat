@@ -33,7 +33,10 @@ test('the drawer shows everyday controls; shape settings are folded away', async
   const { page } = launched
   await page.locator('.surface-header', { hasText: 'Door' }).click()
   const drawer = page.locator('.surface-drawer')
-  await expect(drawer.getByRole('radiogroup', { name: 'Alignment grid' })).toBeVisible()
+  await expect(drawer.getByRole('switch', { name: 'Alignment grid' })).toBeVisible()
+  // Mask settings are folded into their own dropdown, summarized.
+  await expect(drawer.getByRole('button', { name: /^Mask None/ })).toBeVisible()
+  await expect(drawer.getByRole('button', { name: 'Edit the mask on the stage' })).toBeHidden()
   await expect(drawer.getByLabel('Opacity')).toBeVisible()
   // No color strip or rename/delete buttons in the drawer itself.
   await expect(drawer.getByRole('radiogroup', { name: /Outline color/ })).toHaveCount(0)
@@ -73,4 +76,21 @@ test('the row menu renames, recolors and deletes', async () => {
   await expect(page.locator('.surface-header', { hasText: 'Front door' })).toHaveCount(0)
   await expect.poll(async () => (await saved(userData)).map((s) => s.id)).toEqual(['s-2'])
   expect(launched.problems).toEqual([])
+})
+
+test('a switch flips wherever you click it, even on the side already lit', async () => {
+  const { page } = launched
+  await page.locator('.surface-header', { hasText: 'Shelf' }).click()
+  const grid = page.locator('.surface-drawer').getByRole('switch', { name: 'Alignment grid' })
+  await expect(grid).toHaveAttribute('aria-checked', 'false')
+  const box = (await grid.boundingBox())!
+  // Click the "Off" half while it's off: still turns on.
+  await page.mouse.click(box.x + box.width * 0.25, box.y + box.height / 2)
+  await expect(grid).toHaveAttribute('aria-checked', 'true')
+  // Click the "On" half while it's on: turns off.
+  await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2)
+  await expect(grid).toHaveAttribute('aria-checked', 'false')
+  await grid.focus()
+  await page.keyboard.press('Space')
+  await expect(grid).toHaveAttribute('aria-checked', 'true')
 })
