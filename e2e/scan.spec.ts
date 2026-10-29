@@ -154,8 +154,12 @@ test('live scan: the projector shows the frame, MirrorCat finds it, and the phot
     await page.keyboard.press('Shift+ArrowLeft')
     await page.screenshot({ path: 'test-results/scan-line-up.png' })
 
-    await lineUp.getByRole('button', { name: 'Project onto the wall' }).click()
-    await expect(lineUp).toHaveCount(0)
+    await lineUp.getByRole('button', { name: 'Continue' }).click()
+    // Nothing but the wall and the pattern in this photo: no shapes to offer.
+    const shapes = page.getByRole('dialog', { name: 'Pick the shapes' })
+    await expect(shapes.getByRole('status')).toContainText('Didn’t find any flat shapes', { timeout: 10000 })
+    await shapes.getByRole('button', { name: 'Project the whole photo' }).click()
+    await expect(shapes).toHaveCount(0)
     await expect(page.locator('.surface-header', { hasText: 'Scan' })).toBeVisible()
 
     // The new surface fills the projector frame exactly, showing the photo
@@ -180,6 +184,95 @@ test('live scan: the projector shows the frame, MirrorCat finds it, and the phot
     await expect(page.locator('.corner-handle.offstage')).toHaveCount(0)
     await output.waitForTimeout(300)
     await output.screenshot({ path: 'test-results/scan-projected.png' })
+    expect(run.problems).toEqual([])
+  } finally {
+    await run.close()
+  }
+})
+
+test('live scan: shapes in the photo become surfaces with their corners in place', async () => {
+  const run = await launchApp({ scene: scene(), env: { MIRRORCAT_CAPTURE_HOST: '127.0.0.1' } })
+  try {
+    const { page, app, userData } = run
+    const output = await goLive({ app, page })
+    await page.getByRole('button', { name: 'Scan', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Scan with your phone' })
+    const pattern = output.getByLabel('Scan pattern')
+    await expect(pattern).toBeVisible()
+    await output.waitForTimeout(200)
+    const shot = await output.screenshot()
+    const alt = (await dialog.getByRole('img', { name: /QR code for/ }).getAttribute('alt'))!
+    const url = alt.replace('QR code for ', '')
+
+    // The frame fills the middle 80% of the photo. On the wall: a dark
+    // picture frame (a four-sided shape) and a round mirror (traced).
+    const photo = await page.evaluate(async (png) => {
+      const bitmap = await createImageBitmap(new Blob([new Uint8Array(png)], { type: 'image/png' }))
+      const c = document.createElement('canvas')
+      c.width = 1500
+      c.height = Math.round((1500 * bitmap.height) / bitmap.width)
+      const ctx = c.getContext('2d')!
+      ctx.fillStyle = '#1a1a1a'
+      ctx.fillRect(0, 0, c.width, c.height)
+      ctx.drawImage(bitmap, c.width * 0.1, c.height * 0.1, c.width * 0.8, c.height * 0.8)
+      ctx.fillStyle = '#2a2622'
+      ctx.fillRect(c.width * 0.3, c.height * 0.35, c.width * 0.2, c.height * 0.3)
+      ctx.fillStyle = '#d8dde0'
+      ctx.beginPath()
+      ctx.arc(c.width * 0.68, c.height * 0.5, c.height * 0.13, 0, Math.PI * 2)
+      ctx.fill()
+      const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), 'image/jpeg', 0.92))
+      return Array.from(new Uint8Array(await blob.arrayBuffer()))
+    }, Array.from(shot))
+    const sent = await fetch(`${url}/photo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'image/jpeg' },
+      body: new Uint8Array(photo)
+    })
+    expect(sent.status).toBe(200)
+
+    const lineUp = page.getByRole('dialog', { name: 'Line up the photo' })
+    await expect(lineUp.getByRole('status')).toContainText('Found the projector frame', { timeout: 10000 })
+    await lineUp.getByRole('button', { name: 'Continue' }).click()
+
+    const picker = page.getByRole('dialog', { name: 'Pick the shapes' })
+    await expect(picker.getByRole('status')).toContainText('Found 2 shapes', { timeout: 10000 })
+    const rows = picker.getByRole('checkbox')
+    await expect(rows).toHaveCount(2)
+    await expect(rows.nth(0)).toContainText('Four corners')
+    await expect(rows.nth(1)).toContainText('Traced outline')
+    await page.screenshot({ path: 'test-results/scan-shapes.png' })
+
+    // Unpick and re-pick from the list; send shape 1 onto the existing surface.
+    await rows.nth(1).click()
+    await expect(picker.getByRole('button', { name: 'Make 1 surface' })).toBeVisible()
+    await rows.nth(1).click()
+    await picker.getByLabel('Where shape 1 goes').selectOption({ label: 'Move Vase here' })
+    await picker.getByRole('button', { name: 'Make 2 surfaces' }).click()
+    await expect(picker).toHaveCount(0)
+
+    const saved = async (): Promise<SceneState> =>
+      JSON.parse(await readFile(join(userData, 'scene.json'), 'utf8'))
+    // The frame: photo 30–50% across, 35–65% down → (p − 0.1) / 0.8 of the projector frame.
+    await expect.poll(async () => (await saved()).surfaces.length).toBe(2)
+    const now = await saved()
+    const vase = now.surfaces.find((s) => s.name === 'Vase')!
+    const expected = [
+      { x: 0.25, y: 0.3125 },
+      { x: 0.5, y: 0.3125 },
+      { x: 0.5, y: 0.6875 },
+      { x: 0.25, y: 0.6875 }
+    ]
+    vase.corners.forEach((c, i) => {
+      expect(Math.abs(c.x - expected[i].x)).toBeLessThan(0.015)
+      expect(Math.abs(c.y - expected[i].y)).toBeLessThan(0.015)
+    })
+    expect(vase.mask).toBeNull()
+    // The mirror is a new surface, trimmed to its round shape by a mask.
+    const mirror = now.surfaces.find((s) => s.name === 'Shape 2')!
+    expect(mirror.mask).not.toBeNull()
+    await output.waitForTimeout(300)
+    await output.screenshot({ path: 'test-results/scan-shapes-projected.png' })
     expect(run.problems).toEqual([])
   } finally {
     await run.close()

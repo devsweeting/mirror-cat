@@ -4,8 +4,11 @@ import { CAPTURE_SESSION_MS } from '@shared/capture'
 import { mediaUrl, type MediaAsset } from '@shared/media'
 import type { CornerSet, Surface } from '@shared/types'
 import { FULL_FRAME } from '@shared/scanPattern'
+import { DEFAULT_MASK_PARAMS } from '@shared/mask'
+import { shapeNumber, type DetectedShape } from '@shared/shapes'
 import { useSceneStore } from '../state/sceneStore'
 import FrameCornersEditor from './FrameCornersEditor'
+import ShapePicker, { type ShapeTarget } from './ShapePicker'
 
 interface ScanDialogProps {
   /** Where "Put on …" sends the photo; null when no surface is selected. */
@@ -17,16 +20,26 @@ interface ScanDialogProps {
   onClose: () => void
 }
 
-type Detect =
-  | { state: 'off' }
-  | { state: 'finding' }
-  | { state: 'done'; result: FrameDetection; corners: CornerSet }
+type FoundFrame = { state: 'done'; result: FrameDetection; corners: CornerSet }
+type Detect = { state: 'off' } | { state: 'finding' } | FoundFrame
 
 type Phase =
   | { kind: 'starting' }
   | { kind: 'error'; message: string }
   | { kind: 'waiting'; session: CaptureSession; phone: 'none' | 'connected' | 'sending' }
   | { kind: 'photo'; session: CaptureSession; asset: MediaAsset; detect: Detect }
+  | {
+      kind: 'shapes'
+      session: CaptureSession
+      asset: MediaAsset
+      /** The lined-up frame, to go back to. */
+      detect: FoundFrame
+      /** The photo fitted to the projector: shapes are found in this. */
+      fitted: MediaAsset
+      /** Null while looking. */
+      found: DetectedShape[] | null
+      picks: Record<string, ShapeTarget>
+    }
   | { kind: 'expired' }
 
 /** Starting corners when the frame wasn't found: a guess to drag from. */
@@ -46,12 +59,15 @@ const FOCUSABLE =
  * While it waits, the projector (if live) shows the scan pattern -- a
  * glowing frame with a marker in each corner. When the photo arrives, the
  * frame is found in it, outlined for you to check (drag a corner to fix
- * it), and "Project onto the wall" makes a surface that shows the photo
- * exactly where it came from. The link and the pattern close with the
- * dialog.
+ * it). Continue fits the photo to the projector and finds the shapes in
+ * it: each one you pick becomes a surface, its corners already in place
+ * (and an exact mask for shapes that aren't four-sided), ready for your
+ * own content. Or project the whole photo exactly where it came from. The
+ * link and the pattern close with the dialog.
  */
 export default function ScanDialog({ surface, live, onProjected, onClose }: ScanDialogProps) {
   const store = useSceneStore
+  const surfaces = useSceneStore((s) => s.surfaces)
   const [phase, setPhase] = useState<Phase>({ kind: 'starting' })
   const [notice, setNotice] = useState<string | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -172,27 +188,115 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
 
   /**
    * Straighten the frame's part of the photo into a projector-sized image
-   * and put it on a new surface that fills the frame exactly: every photo
-   * pixel lands on the projector pixel that lit it, and the surface stays
-   * inside the projector's area (nothing outside it can be lit anyway).
+   * (every photo pixel lands on the projector pixel that lit it), then
+   * look for shapes in it.
    */
-  const projectOntoWall = async (asset: MediaAsset, frameInPhoto: CornerSet): Promise<void> => {
+  const continueToShapes = async (
+    session: CaptureSession,
+    asset: MediaAsset,
+    detect: FoundFrame
+  ): Promise<void> => {
     setProjecting(true)
     setNotice(null)
+    let fitted: MediaAsset
     try {
-      const fitted = await window.mirrorcat.capture.rectify(asset.id, frameInPhoto)
-      const scene = store.getState()
-      const id = scene.addSurface('Scan')
-      scene.setSurfaceAsset(id, fitted.id)
-      scene.updateCorners(id, FULL_FRAME.map((c) => ({ ...c })) as CornerSet)
-      scene.updateSurfaceSettings(id, { fit: 'stretch', warp: 'perspective' })
-      onProjected(id)
-      onClose()
+      fitted = await window.mirrorcat.capture.rectify(asset.id, detect.corners)
     } catch (error) {
       console.error('[scan] could not fit the photo', error)
       setNotice('Those corners don’t make a frame shape. Move them onto the frame’s corners and try again.')
       setProjecting(false)
+      return
     }
+    setProjecting(false)
+    setPhase({ kind: 'shapes', session, asset, detect, fitted, found: null, picks: {} })
+    const found = await window.mirrorcat.capture.findShapes(fitted.id).catch(() => [])
+    setPhase((current) =>
+      current.kind === 'shapes' && current.fitted.id === fitted.id
+        ? { ...current, found, picks: Object.fromEntries(found.map((s) => [s.id, 'new'])) }
+        : current
+    )
+  }
+
+  /** A new surface filling the frame, showing the whole fitted photo. */
+  const projectWhole = (fitted: MediaAsset): void => {
+    const scene = store.getState()
+    const id = scene.addSurface('Scan')
+    scene.setSurfaceAsset(id, fitted.id)
+    scene.updateCorners(id, FULL_FRAME.map((c) => ({ ...c })) as CornerSet)
+    scene.updateSurfaceSettings(id, { fit: 'stretch', warp: 'perspective' })
+    onProjected(id)
+    onClose()
+  }
+
+  /**
+   * Each picked shape becomes a surface: a new one, or an existing surface
+   * moved onto it (keeping its content). Four-sided shapes need only their
+   * corners; traced ones also get an exact mask, cut in main from the
+   * shape's pixels.
+   */
+  const makeSurfaces = async (fitted: MediaAsset, found: DetectedShape[], picks: Record<string, ShapeTarget>) => {
+    setProjecting(true)
+    setNotice(null)
+    let first: string | null = null
+    try {
+      for (const shape of found) {
+        const target = picks[shape.id]
+        if (!target) continue
+        const exists = target !== 'new' && store.getState().surfaces.some((s) => s.id === target)
+        const id = exists ? target : store.getState().addSurface(`Shape ${shapeNumber(shape)}`)
+        const maskId =
+          shape.kind === 'outline'
+            ? await window.mirrorcat.capture.shapeMask(fitted.id, shape.id, shape.corners)
+            : null
+        const scene = store.getState()
+        scene.updateCorners(id, shape.corners.map((c) => ({ ...c })) as CornerSet)
+        scene.updateEdgeNodes(id, [[], [], [], []])
+        scene.updateSurfaceSettings(id, { warp: 'perspective' })
+        // An old mask was cut for a different shape, so it never carries over.
+        scene.setSurfaceMask(id, maskId ? { id: maskId, ...DEFAULT_MASK_PARAMS } : null)
+        first ??= id
+      }
+    } catch (error) {
+      console.error('[scan] could not make surfaces', error)
+      setNotice('Some shapes couldn’t be made into surfaces. Check the surfaces list, then try again.')
+      setProjecting(false)
+      return
+    }
+    setProjecting(false)
+    if (first) onProjected(first)
+    onClose()
+  }
+
+  const togglePick = (shapeId: string): void => {
+    setPhase((current) => {
+      if (current.kind !== 'shapes') return current
+      const picks = { ...current.picks }
+      if (picks[shapeId]) delete picks[shapeId]
+      else picks[shapeId] = 'new'
+      return { ...current, picks }
+    })
+  }
+
+  const setTarget = (shapeId: string, target: ShapeTarget): void => {
+    setPhase((current) => {
+      if (current.kind !== 'shapes') return current
+      const picks: Record<string, ShapeTarget> = {}
+      // One surface can only sit on one shape: whoever had it goes back to "new".
+      for (const [id, t] of Object.entries(current.picks)) picks[id] = target !== 'new' && t === target ? 'new' : t
+      picks[shapeId] = target
+      return { ...current, picks }
+    })
+  }
+
+  const pickAll = (all: boolean): void => {
+    setPhase((current) =>
+      current.kind === 'shapes' && current.found
+        ? {
+            ...current,
+            picks: all ? Object.fromEntries(current.found.map((s) => [s.id, current.picks[s.id] ?? 'new'])) : {}
+          }
+        : current
+    )
   }
 
   const takeAnother = (session: CaptureSession): void => {
@@ -209,6 +313,104 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
   }
 
   const minutes = Math.round(CAPTURE_SESSION_MS / 60000)
+
+  if (phase.kind === 'shapes') {
+    const { found, picks, fitted } = phase
+    const pickedCount = found ? found.filter((s) => picks[s.id]).length : 0
+    const status =
+      found === null
+        ? 'Looking for shapes…'
+        : found.length === 0
+          ? 'Didn’t find any flat shapes. You can still project the whole photo, then draw surfaces yourself.'
+          : `Found ${found.length} shape${found.length === 1 ? '' : 's'}. Each one you pick becomes a surface with its corners in place, ready for your own content.`
+
+    return (
+      <div className="settings-backdrop" onMouseDown={handleBackdropMouseDown}>
+        <div
+          ref={dialogRef}
+          className="scan-dialog scan-dialog-shapes"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="scan-title"
+          tabIndex={-1}
+          onKeyDown={handleKeyDown}
+        >
+          <header className="settings-header">
+            <h1 id="scan-title">Pick the shapes</h1>
+            <button type="button" className="icon-btn" onClick={onClose} aria-label="Close scan">
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </button>
+          </header>
+          <div className="scan-body scan-photo">
+            {found && found.length > 0 ? (
+              <ShapePicker
+                imageUrl={mediaUrl(fitted.id)}
+                shapes={found}
+                picks={picks}
+                surfaces={surfaces.map((s) => ({ id: s.id, name: s.name }))}
+                onToggle={togglePick}
+                onTarget={setTarget}
+                onPickAll={pickAll}
+              />
+            ) : (
+              <img
+                className={`scan-photo-image${found === null ? ' finding' : ''}`}
+                src={mediaUrl(fitted.id)}
+                alt="Your scan, fitted to the projector"
+              />
+            )}
+
+            <p className="scan-status" role="status">
+              {status}
+            </p>
+            {notice && (
+              <p className="scan-status error" role="alert">
+                {notice}
+              </p>
+            )}
+
+            <div className="scan-actions">
+              {found && found.length > 0 && (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={projecting || pickedCount === 0}
+                  onClick={() => void makeSurfaces(fitted, found, picks)}
+                >
+                  {projecting
+                    ? 'Making surfaces…'
+                    : pickedCount === 0
+                      ? 'Pick a shape'
+                      : `Make ${pickedCount} surface${pickedCount === 1 ? '' : 's'}`}
+                </button>
+              )}
+              <button
+                type="button"
+                className={found && found.length > 0 ? 'btn btn-ghost' : 'btn'}
+                disabled={projecting || found === null}
+                onClick={() => projectWhole(fitted)}
+                title="One surface filling the frame, showing the photo exactly where it was taken"
+              >
+                Project the whole photo
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={projecting}
+                onClick={() =>
+                  setPhase({ kind: 'photo', session: phase.session, asset: phase.asset, detect: phase.detect })
+                }
+              >
+                Back
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (phase.kind === 'photo') {
     const detect = phase.detect
@@ -286,11 +488,11 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
                 <button
                   type="button"
                   className="btn"
-                  onClick={() => void projectOntoWall(phase.asset, detect.corners)}
+                  onClick={() => void continueToShapes(phase.session, phase.asset, detect)}
                   disabled={projecting}
-                  title="Fit the photo to the projector and show it exactly where it was taken"
+                  title="Fit the photo to the projector, then pick the shapes to map"
                 >
-                  {projecting ? 'Fitting to the projector…' : 'Project onto the wall'}
+                  {projecting ? 'Fitting to the projector…' : 'Continue'}
                 </button>
               )}
               {surface && (
@@ -355,7 +557,11 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
                   ? 'Stand beside the projector and fit the whole glowing frame in the photo.'
                   : 'Stand beside the projector and take the photo.'}
               </li>
-              <li>{live ? 'Check the frame MirrorCat finds, then project it.' : 'It shows up here, and in your library.'}</li>
+              <li>
+                {live
+                  ? 'Check the frame MirrorCat finds, then pick the shapes to map.'
+                  : 'It shows up here, and in your library.'}
+              </li>
             </ol>
 
             <p

@@ -58,6 +58,24 @@ When the photo arrives:
 
 Not live: no pattern, and the photo can go on a surface as-is.
 
+## Shapes → surfaces
+
+After lining up, **Continue** fits the photo to the projector and finds
+the shapes in it (decision 031). **Pick the shapes** shows them outlined
+and numbered. Click one, or its row, to pick it. Each picked shape goes to
+a **New surface** or onto an existing one (**Move Vase here**).
+
+- **Make N surfaces** puts the corners in place.
+  - Four-sided shapes (frames, doors, box faces) get exactly their corners.
+  - Anything else gets a rectangle around it plus an exact mask.
+- Then drop your own content on each surface.
+- **Project the whole photo** is still there for using the photo itself.
+
+The built-in finder handles flat, solid, reasonably high-contrast
+shapes. Organic or low-contrast objects (plants, a white box on a white
+wall) are what SAM 2 is for (next). Until then, draw those with the mask
+tools.
+
 ## How it's built
 
 | Piece | Where |
@@ -68,6 +86,7 @@ Not live: no pattern, and the photo can go on a surface as-is.
 | IPC | `main/ipc/captureHandlers.ts` -- `capture:start` / `capture:stop` (control window only), `capture:event` to the editor |
 | QR code | `qrcode` (MIT), rendered as SVG in main, shown as a data: image |
 | Dialog | `renderer/components/ScanDialog.tsx`, `FrameCornersEditor.tsx`, `styles/scan.css` |
+| Shape finding | `shared/shapes.ts` (geometry), `main/capture/shapeDetect.ts` (regions, quads, masks), `components/ShapePicker.tsx`; IPC `capture:find-shapes`, `capture:shape-mask` |
 | Scan pattern + frame detection | `shared/scanPattern.ts`, `shared/homography.ts`, `main/capture/frameDetect.ts`, `components/ScanPattern.tsx` (projector) |
 
 **Why a file input, not a live camera view.** `getUserMedia` needs a
@@ -118,7 +137,10 @@ have no Wi-Fi.
 
 ## Next
 
-- Tap-to-select (SAM 2) on the photo, writing the selection into the
-  surface's mask through the same photo → frame mapping.
-- Run frame detection in a worker (it's ~0.3 s on the main thread today).
+- SAM 2 as a second shape finder, for organic and low-contrast shapes:
+  its masks feed the same picker. Also tap-to-add a shape the finder
+  missed, and merge shapes it split.
+- Generative content per shape: the photo crop and the shape's mask as
+  the prompt's canvas.
+- Run frame and shape detection in a worker (main thread today).
 - Later: Gray-code structured light for a per-pixel fit.

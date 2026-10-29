@@ -56,7 +56,7 @@ app.whenReady().then(async () => {
 
   // Handlers before the window, so the renderer's first invoke can't race them.
   registerIpcHandlers({ library, masks, autosave, savedSurfaces })
-  registerCaptureHandlers({ library })
+  registerCaptureHandlers({ library, masks })
   registerAiHandlers({
     keys,
     settings: aiSettings,

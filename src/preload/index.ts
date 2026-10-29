@@ -15,6 +15,7 @@ import type {
   SetKeyResult
 } from '../shared/ai'
 import type { CaptureEvent, CaptureStartResult, FrameDetection } from '../shared/capture'
+import type { DetectedShape } from '../shared/shapes'
 
 const media = {
   list: (): Promise<MediaAsset[]> => ipcRenderer.invoke(IpcChannels.MediaList),
@@ -90,6 +91,12 @@ const capture = {
     corners: CornerSet,
     frame?: { width: number; height: number }
   ): Promise<MediaAsset> => ipcRenderer.invoke(IpcChannels.CaptureRectify, assetId, corners, frame),
+  /** Flat shapes in a fitted scan image (0..1 of the frame). */
+  findShapes: (assetId: string): Promise<DetectedShape[]> =>
+    ipcRenderer.invoke(IpcChannels.CaptureFindShapes, assetId),
+  /** Mask id for a found shape on a surface with these corners, or null. */
+  shapeMask: (assetId: string, shapeId: string, corners: CornerSet): Promise<string | null> =>
+    ipcRenderer.invoke(IpcChannels.CaptureShapeMask, assetId, shapeId, corners),
   /** Projector window: draw the scan pattern or not. */
   onPattern: (callback: (on: boolean) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, on: boolean): void => callback(on)

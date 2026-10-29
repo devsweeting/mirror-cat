@@ -607,3 +607,54 @@ projector)" image and re-projects the markers onto their own pixels;
 an oversized surface shows pinned corners and the note, and Fit to the
 frame fixes it).
 
+## 031 Shapes found in a scan become surfaces (built-in finder first, SAM 2 later)
+*2026-10-28 · Accepted*
+
+**Context.** A lined-up scan is in projector space, so anything outlined in
+it is already a set of surface corners. Devin wants MirrorCat to find the
+shapes in the photo and let you assign each to a surface, then fill them
+with your own content (and later, generated content).
+
+**Decision.**
+- After **Continue** on the line-up step, the photo is fitted to the frame
+  and `capture:find-shapes` looks for shapes in it
+  (`main/capture/shapeDetect.ts`). **Pick the shapes** outlines them over
+  the photo, numbered in reading order, all picked by default. Clicking a
+  shape (or its row) toggles it. Each row says where it goes: **New
+  surface** or **Move <surface> here** (it keeps its content; one surface
+  per shape).
+- **Make N surfaces**: a four-sided shape becomes a perspective surface
+  with exactly its corners and no mask. Any other shape gets a rectangle
+  fitted around it (padded a few pixels) plus an exact mask, cut in main
+  from the shape's own pixels (`capture:shape-mask` → mask store). Old
+  edge nodes and masks are cleared. **Project the whole photo** is the
+  old behaviour.
+- Built-in finder (stage 1). Runs at 640 px on the main thread, ~50–150
+  ms. It makes three passes: faces between Sobel edges, then brighter and
+  darker than Otsu. Each pass yields connected regions, which are kept
+  when they're 0.4–80% of the frame, touch at most one side and sit clear
+  of the pattern's markers. Holes are filled, the outline is traced and
+  convex-hulled, and regions with solidity ≥ 0.6 are kept. A
+  Douglas–Peucker four-point fit, with sides refit by least squares, makes
+  it a quad if it covers 92–110% of the hull. Duplicates across passes
+  merge at IoU 0.7, preferring quads. At most 16.
+- The picker only needs regions, so SAM 2 (stage 2) can plug in behind
+  the same IPC.
+
+**Considered.**
+- SAM 2 now. It covers organic and low-contrast shapes, but it costs a
+  ~150 MB model, onnxruntime and 5–20 s per photo on CPU. It's staged
+  after this, behind the same picker.
+- Outline polygons for masks. A hull loses concave shapes; region pixels
+  are exact and match what SAM 2 outputs.
+- Masks for quads too. Not needed, and they'd stop the corners being
+  freely editable.
+
+**Verified by** `shared/shapes.test.ts` (corner order, rounded-corner quad
+fit, min-area rectangle, frame → surface mapping, smallest-shape hit test),
+`main/capture/shapeDetect.test.ts` (synthetic walls: dark frame, angled
+low-contrast box face, round shape traced, frame + picture, markers and
+specks ignored, reading order, exact mask) and `e2e/scan.spec.ts` (a live
+scan with a frame and a round mirror: two shapes found, one moved onto an
+existing surface at the right corners with no mask, one new and masked).
+

@@ -44,6 +44,10 @@ export const IpcChannels = {
   CaptureDetectFrame: 'capture:detect-frame',
   /** Control window → main: straighten the frame's part of an image into a frame-sized image. */
   CaptureRectify: 'capture:rectify',
+  /** Control window → main: find flat shapes in a fitted scan image. */
+  CaptureFindShapes: 'capture:find-shapes',
+  /** Control window → main: an exact mask for a found shape on a surface with given corners. */
+  CaptureShapeMask: 'capture:shape-mask',
   /** Main → control window: the projector window is now on a different display. */
   OutputDisplayChanged: 'output:display-changed',
 

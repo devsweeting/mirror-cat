@@ -300,3 +300,234 @@
 .frame-editor-handle:active {
   cursor: grabbing;
 }
+
+/* Pick the shapes: the fitted scan with shapes outlined, a list beside it. */
+.scan-dialog-shapes {
+  width: min(900px, 100%);
+}
+
+.shape-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  gap: 14px;
+  min-height: 0;
+}
+
+.shape-stage-wrap {
+  display: grid;
+  place-items: center;
+  padding: 10px;
+  background: #000;
+  border-radius: var(--radius-md);
+}
+
+/* Takes the scan's aspect ratio, so 0..1 coordinates match the image. */
+.shape-stage {
+  position: relative;
+  width: 100%;
+  max-height: 440px;
+  user-select: none;
+}
+
+.shape-stage.over-shape {
+  cursor: pointer;
+}
+
+.shape-stage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+.shape-stage svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.shape-fill {
+  fill: transparent;
+  transition: fill 120ms ease;
+}
+
+.shape-halo {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.65);
+  stroke-width: 4;
+}
+
+.shape-line {
+  fill: none;
+  stroke: var(--dusk);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.shape-outline.hovered .shape-fill {
+  fill: color-mix(in srgb, var(--plaster) 12%, transparent);
+}
+
+.shape-outline.picked .shape-fill {
+  fill: color-mix(in srgb, var(--bulb) 16%, transparent);
+}
+
+.shape-outline.picked .shape-line {
+  stroke: var(--bulb);
+  stroke-width: 2;
+  stroke-dasharray: none;
+}
+
+.shape-outline.picked.hovered .shape-fill {
+  fill: color-mix(in srgb, var(--bulb) 26%, transparent);
+}
+
+.shape-badge {
+  position: absolute;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--plaster);
+  background: rgba(29, 26, 35, 0.85);
+  border: 1.5px solid var(--dusk);
+  border-radius: 11px;
+  pointer-events: none;
+}
+
+.shape-badge.picked {
+  color: var(--room);
+  background: var(--bulb);
+  border-color: var(--bulb);
+}
+
+.shape-list-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.shape-list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--dusk);
+}
+
+.shape-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.shape-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+}
+
+.shape-list li.hovered {
+  background: color-mix(in srgb, var(--plaster) 5%, transparent);
+}
+
+.shape-list li.picked {
+  border-color: color-mix(in srgb, var(--bulb) 35%, transparent);
+  background: color-mix(in srgb, var(--bulb) 6%, transparent);
+}
+
+.shape-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.shape-row:focus-visible {
+  outline: 2px solid var(--plaster);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.shape-num {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--plaster);
+  border: 1.5px solid var(--dusk);
+  border-radius: 11px;
+}
+
+.shape-list li.picked .shape-num {
+  color: var(--room);
+  background: var(--bulb);
+  border-color: var(--bulb);
+}
+
+.shape-row-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.shape-row-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.shape-row-kind {
+  font-size: 11px;
+  color: var(--dusk);
+}
+
+.shape-target {
+  width: 100%;
+  margin-left: 0;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--plaster);
+  background: var(--room);
+  border: 1px solid color-mix(in srgb, var(--dusk) 40%, transparent);
+  border-radius: 6px;
+}
+
+@media (max-width: 720px) {
+  .shape-picker {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shape-fill {
+    transition: none;
+  }
+}
