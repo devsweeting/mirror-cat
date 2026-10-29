@@ -12,6 +12,7 @@ import type {
   AnimationSettings,
   SetKeyResult
 } from '../shared/ai'
+import type { CaptureEvent, CaptureStartResult } from '../shared/capture'
 
 export interface MirrorCatMediaApi {
   list(): Promise<MediaAsset[]>
@@ -32,6 +33,13 @@ export interface MirrorCatMasksApi {
   pickImage(): Promise<{ name: string; bytes: Uint8Array } | null>
   /** Edit ▸ Edit Mask (⇧⌘M) was chosen. */
   onToggleEdit(callback: () => void): () => void
+}
+
+export interface MirrorCatCaptureApi {
+  /** Open a scan link; resolves with its QR code, or why it couldn't. */
+  start(): Promise<CaptureStartResult>
+  stop(): Promise<boolean>
+  onEvent(callback: (event: CaptureEvent) => void): () => void
 }
 
 export interface MirrorCatAiApi {
@@ -56,6 +64,7 @@ export interface MirrorCatApi {
   onOpenSettings(callback: () => void): () => void
   media: MirrorCatMediaApi
   masks: MirrorCatMasksApi
+  capture: MirrorCatCaptureApi
   ai: MirrorCatAiApi
 }
 

@@ -88,6 +88,12 @@ TypeScript + React + Three.js:
     the editor only. Images become masks via drop / native dialog / the
     surface image's alpha. Unused masks are swept on launch (decisions
     024–025).
+  - Scan / phone capture (`main/capture/`, `main/ipc/captureHandlers.ts`,
+    `components/ScanDialog.tsx`; docs/phone-capture.md, decision 028): a
+    QR code for a short-lived, token-gated page on the home network
+    (one LAN address, random port, open only while the dialog is). The
+    phone uploads a ≤4096 px JPEG into the library. Dev override:
+    MIRRORCAT_CAPTURE_HOST=127.0.0.1.
   - Settings › AI & animation (`components/settings/`, `main/ai/`,
     `shared/ai.ts`; docs/ai-settings.md): provider keys checked with a free
     request, encrypted with safeStorage in main, never returned to the

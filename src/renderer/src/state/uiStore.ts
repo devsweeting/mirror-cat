@@ -10,6 +10,8 @@ interface UiStore {
   toggleLibrary: () => void
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
+  scanOpen: boolean
+  setScanOpen: (open: boolean) => void
 }
 
 const LIBRARY_OPEN_KEY = 'mirrorcat.libraryOpen'
@@ -38,5 +40,7 @@ export const useUiStore = create<UiStore>((set, get) => ({
   },
   toggleLibrary: () => get().setLibraryOpen(!get().libraryOpen),
   settingsOpen: false,
-  setSettingsOpen: (open) => set({ settingsOpen: open })
+  setSettingsOpen: (open) => set({ settingsOpen: open }),
+  scanOpen: false,
+  setScanOpen: (open) => set({ scanOpen: open })
 }))

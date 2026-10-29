@@ -14,6 +14,7 @@ import { electronEncryptor } from './ai/electronEncryptor'
 import { AiSettingsStore } from './ai/aiSettingsStore'
 import type { FetchLike } from './ai/keyCheck'
 import { registerAiHandlers } from './ipc/aiHandlers'
+import { registerCaptureHandlers } from './ipc/captureHandlers'
 
 // Point the library + autosave at a scratch folder for tests and demos
 // without touching your real data: MIRRORCAT_USER_DATA=/tmp/x npm run dev
@@ -55,6 +56,7 @@ app.whenReady().then(async () => {
 
   // Handlers before the window, so the renderer's first invoke can't race them.
   registerIpcHandlers({ library, masks, autosave, savedSurfaces })
+  registerCaptureHandlers({ library })
   registerAiHandlers({
     keys,
     settings: aiSettings,

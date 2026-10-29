@@ -505,3 +505,32 @@ clicking the active option should do nothing.
 **Verified by** `e2e/drawer.spec.ts` (switch flips from either half and
 with Space; mask summarized while folded) and `e2e/mask.spec.ts`.
 
+## 028 Phone capture over the home network (Scan)
+*2026-10-28 · Accepted*
+
+**Context.** Scanning an object starts with a photo taken from beside the
+projector. Phones are the camera everyone has, but getting a photo from a
+phone into a desktop app usually means AirDrop, email or cables.
+
+**Decision.** A Scan dialog shows a QR code for a short-lived page served
+by the main process on the home network. The phone takes the photo with
+its own camera (file input with `capture`), re-encodes it to a JPEG of at
+most 4096 px, and posts it. The photo goes through the normal library
+import. The server listens on one LAN address and a random port, only
+while the dialog is open (10 minutes at most). It's token-gated, checks
+the Host header, and is size- and count-capped. Long form:
+`docs/phone-capture.md`.
+
+**Considered.**
+- A live viewfinder via `getUserMedia`: it needs HTTPS on the LAN, so a
+  self-signed certificate and browser warnings.
+- A cloud relay: it needs a backend and accounts, and the photo would
+  leave the house.
+- Binding to 0.0.0.0: it exposes more interfaces than needed.
+- Bluetooth or WebRTC: no simple phone-side story without an app.
+
+**Verified by** `main/capture/lanAddress.test.ts`,
+`main/capture/captureServer.test.ts` (token, Host check, upload limits,
+rejection, stop and expiry) and `e2e/scan.spec.ts` (phone page, upload,
+Put on surface, link closes with the dialog; refused upload).
+

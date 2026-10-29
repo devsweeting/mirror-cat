@@ -88,3 +88,19 @@ export function SettingsIcon() {
     </svg>
   )
 }
+
+/** A camera: scan with your phone. */
+export function CameraIcon() {
+  return (
+    <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+      <path
+        d="M2.3 5.2h2.4l1.3-1.7h4l1.3 1.7h2.4v7.5H2.3z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="8.8" r="2.3" fill="none" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  )
+}

@@ -31,6 +31,12 @@ export const IpcChannels = {
   /** Main → control window: Edit ▸ Edit Mask (⇧⌘M) toggles mask mode. */
   MaskToggleEdit: 'mask:toggle-edit',
 
+  /** Control window → main: open a scan link (phone capture); returns the QR code. */
+  CaptureStart: 'capture:start',
+  CaptureStop: 'capture:stop',
+  /** Main → control window: the phone opened the page, sent a photo, etc. */
+  CaptureEvent: 'capture:event',
+
   /** Main → control window: open Settings (app menu, ⌘,). */
   SettingsOpen: 'settings:open',
   AiGetState: 'ai:get-state',

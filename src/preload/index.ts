@@ -14,6 +14,7 @@ import type {
   AnimationSettings,
   SetKeyResult
 } from '../shared/ai'
+import type { CaptureEvent, CaptureStartResult } from '../shared/capture'
 
 const media = {
   list: (): Promise<MediaAsset[]> => ipcRenderer.invoke(IpcChannels.MediaList),
@@ -67,6 +68,18 @@ const masks = {
     const listener = (): void => callback()
     ipcRenderer.on(IpcChannels.MaskToggleEdit, listener)
     return () => ipcRenderer.removeListener(IpcChannels.MaskToggleEdit, listener)
+  }
+}
+
+/** Scan: a QR link the phone uses to send a photo into the library. */
+const capture = {
+  start: (): Promise<CaptureStartResult> => ipcRenderer.invoke(IpcChannels.CaptureStart),
+  stop: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.CaptureStop),
+  onEvent: (callback: (event: CaptureEvent) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: CaptureEvent): void =>
+      callback(payload)
+    ipcRenderer.on(IpcChannels.CaptureEvent, listener)
+    return () => ipcRenderer.removeListener(IpcChannels.CaptureEvent, listener)
   }
 }
 
@@ -139,6 +152,7 @@ const api = {
 
   media,
   masks,
+  capture,
   ai
 }
 

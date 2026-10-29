@@ -5,7 +5,8 @@ import CatEyes from './components/CatEyes'
 import ProjectorControl from './components/ProjectorControl'
 import PromptPanel from './components/PromptPanel'
 import LibraryPanel from './components/LibraryPanel'
-import { LibraryIcon, SettingsIcon } from './components/icons'
+import { CameraIcon, LibraryIcon, SettingsIcon } from './components/icons'
+import ScanDialog from './components/ScanDialog'
 import SettingsPanel from './components/settings/SettingsPanel'
 import MaskPaintToolbar from './components/MaskPaintToolbar'
 import {
@@ -39,6 +40,8 @@ export default function App() {
   const toggleLibrary = useUiStore((s) => s.toggleLibrary)
   const settingsOpen = useUiStore((s) => s.settingsOpen)
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen)
+  const scanOpen = useUiStore((s) => s.scanOpen)
+  const setScanOpen = useUiStore((s) => s.setScanOpen)
 
   // App menu ▸ Settings (⌘,).
   useEffect(() => window.mirrorcat.onOpenSettings(() => setSettingsOpen(true)), [setSettingsOpen])
@@ -220,6 +223,15 @@ export default function App() {
         <div className="topbar-spacer" />
         <button
           type="button"
+          className="btn btn-ghost topbar-scan"
+          onClick={() => setScanOpen(true)}
+          title="Take a photo with your phone"
+        >
+          <CameraIcon />
+          Scan
+        </button>
+        <button
+          type="button"
           className={`btn btn-ghost topbar-library${libraryOpen ? ' active' : ''}`}
           onClick={toggleLibrary}
           aria-pressed={libraryOpen}
@@ -340,6 +352,7 @@ export default function App() {
         {libraryOpen && <LibraryPanel targetSurfaceId={effectiveSurfaceId} />}
       </div>
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {scanOpen && <ScanDialog surface={selectedSurface} onClose={() => setScanOpen(false)} />}
     </div>
   )
 }
