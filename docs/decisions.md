@@ -658,3 +658,66 @@ specks ignored, reading order, exact mask) and `e2e/scan.spec.ts` (a live
 scan with a frame and a round mirror: two shapes found, one moved onto an
 existing surface at the right corners with no mask, one new and masked).
 
+## 032 The detailed finder (SAM 2) and boxes around what you mean
+*2026-10-28 · Accepted*
+
+**Context.** Devin's first real shape scan offered the art inside a
+picture frame, not the frame, which ran off the bottom of the photo.
+Devin asked for SAM 2, and for a way to point the finder at an area.
+
+**Decision.**
+- **Frames cut off by the photo's edge.** When filling a region's holes,
+  box sides that are the photo's own edge count as closed, so a U-shaped
+  frame gets its middle. Duplicates now merge at IoU 0.88, not 0.7, so a
+  frame (~0.8 overlap with its picture) and the picture are both offered.
+- **Draw a box.** On *Pick the shapes*, a click picks; a drag (6 px or
+  more) draws a box (`capture:find-in-box`).
+  - With the detailed finder installed, SAM gets the box as its prompt.
+    The best-rated mask is clipped to the box (+3%) and fitted like any
+    shape. It may touch three sides of the photo and be loosely solid.
+  - Without it, the built-in finder picks the candidate, from any pass,
+    merged or not, whose bounds best match the box (IoU ≥ 0.5).
+  - A shape already in the list is picked instead of duplicated.
+- **Detailed finder = SAM 2.1 hiera-tiny**, from onnx-community's ONNX
+  export, pinned to revision `814a066…`. About 155 MB in four files, each
+  checked by SHA-256 while it streams, then renamed into
+  `userData/models/sam2.1-hiera-tiny`.
+  - Downloaded on demand from the picker (progress, Cancel; `sam:*` IPC,
+    Electron `net.fetch`).
+  - Runs in **onnxruntime-node inside an Electron `utilityProcess`**
+    (`main/segment/samWorker.ts`, bundled via `?modulePath`). The encoder
+    blocks its thread for ~2.5–3 s, which would freeze main. A native
+    crash only kills the worker.
+  - The worker holds one photo's features; it's stopped when the Scan
+    dialog closes.
+  - Input: the fitted photo squashed to 1024² (not padded),
+    ImageNet-normalized.
+  - The decoder answers a box or point in ~60–110 ms with 3 masks (256²
+    logits), sampled bilinearly to the finder's size (`samMasks.ts`).
+- **Find more shapes:** a ~10×6 point grid over the frame (~6 s). It keeps
+  masks with predicted IoU ≥ 0.7, stability ≥ 0.85 and an object score
+  above 0. Answers over half the frame (the wall) are dropped. Up to 16
+  new shapes, added unpicked.
+- **Packaging.** `asarUnpack: node_modules/onnxruntime-node/**`.
+
+**Considered.**
+- onnxruntime-web in the renderer (WASM/WebGPU). That needs
+  `'wasm-unsafe-eval'` in the CSP and model files served to the page;
+  native CPU is faster.
+- Running ORT on main's thread: it blocks the event loop (measured: no
+  timer ticks for 3 s).
+- Other ONNX exports: unpinned re-uploads, zips, or `.ort`-only.
+- Batched point prompts: the export fixes one object per call, and
+  batching would copy 16 MB of features each time.
+- Fp16 or int8 encoders (smaller): kept fp32 for mask quality on CPU.
+
+**Verified by** `shapeDetect.test.ts`: a frame cut off by the bottom edge
+plus its picture; masks to candidates; new vs. existing; a box picks the
+frame or the picture. `samModel.test.ts`: pinned URLs, checksum failures
+leave nothing behind, retries resume. `samMasks.test.ts`: normalization,
+logit upsampling, stability, grid. `e2e/scan.spec.ts`: a box around a
+frame picks the frame with the built-in finder; with the real model (run
+only where it's downloaded), Find more completes and a box on the frame
+gives its corners within 3%. On Devin's own photo the frame now comes
+back as a quad at its true corners.
+

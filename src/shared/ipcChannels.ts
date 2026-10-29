@@ -48,6 +48,18 @@ export const IpcChannels = {
   CaptureFindShapes: 'capture:find-shapes',
   /** Control window → main: an exact mask for a found shape on a surface with given corners. */
   CaptureShapeMask: 'capture:shape-mask',
+  /** Control window → main: run the detailed finder (SAM 2) over a fitted scan for more shapes. */
+  CaptureFindMore: 'capture:find-more',
+  /** Control window → main: the shape inside a box drawn on a fitted scan. */
+  CaptureFindInBox: 'capture:find-in-box',
+  /** Control window → main: is the detailed finder's model here? */
+  SamStatus: 'sam:status',
+  /** Control window → main: download the detailed finder's model (resolves when done). */
+  SamDownload: 'sam:download',
+  /** Control window → main: stop that download. */
+  SamCancel: 'sam:cancel',
+  /** Main → control window: download progress / status changes. */
+  SamProgress: 'sam:progress',
   /** Main → control window: the projector window is now on a different display. */
   OutputDisplayChanged: 'output:display-changed',
 

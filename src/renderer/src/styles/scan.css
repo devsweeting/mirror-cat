@@ -531,3 +531,120 @@
     transition: none;
   }
 }
+
+/* Drawing a box around something on the scan. */
+.shape-stage {
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.shape-stage.over-shape {
+  cursor: pointer;
+}
+
+.shape-box {
+  position: absolute;
+  border: 1.5px dashed var(--bulb);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--bulb) 8%, transparent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+
+.shape-box.searching {
+  animation: shape-box-pulse 1s ease-in-out infinite;
+}
+
+@keyframes shape-box-pulse {
+  50% {
+    background: color-mix(in srgb, var(--bulb) 20%, transparent);
+  }
+}
+
+.shape-stage-wrap {
+  grid-template-rows: auto auto;
+  gap: 8px;
+}
+
+.shape-hint {
+  margin: 0;
+  justify-self: start;
+  font-size: 12px;
+  color: var(--dusk);
+}
+
+.shape-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dusk);
+}
+
+/* The detailed finder (SAM 2), under the shape list. */
+.finder-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: auto;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, var(--dusk) 30%, transparent);
+  border-radius: var(--radius-md);
+}
+
+.finder-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--plaster);
+}
+
+.finder-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--dusk);
+}
+
+.finder-text.warn {
+  color: var(--alert);
+}
+
+.finder-btn {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.finder-progress {
+  width: 100%;
+  height: 4px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--dusk) 25%, transparent);
+  border-radius: 2px;
+}
+
+.finder-progress span {
+  display: block;
+  height: 100%;
+  background: var(--bulb);
+  transition: width 120ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shape-box.searching {
+    animation: none;
+  }
+
+  .finder-progress span {
+    transition: none;
+  }
+}
+
+.shape-list-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.shape-list-actions .link-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

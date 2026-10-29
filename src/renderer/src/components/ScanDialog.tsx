@@ -8,7 +8,10 @@ import { DEFAULT_MASK_PARAMS } from '@shared/mask'
 import { shapeNumber, type DetectedShape } from '@shared/shapes'
 import { useSceneStore } from '../state/sceneStore'
 import FrameCornersEditor from './FrameCornersEditor'
+import type { FrameBox } from '@shared/sam'
 import ShapePicker, { type ShapeTarget } from './ShapePicker'
+import DetailedFinder from './DetailedFinder'
+import { useSamStatus } from '../hooks/useSamStatus'
 
 interface ScanDialogProps {
   /** Where "Put on …" sends the photo; null when no surface is selected. */
@@ -68,6 +71,11 @@ const FOCUSABLE =
 export default function ScanDialog({ surface, live, onProjected, onClose }: ScanDialogProps) {
   const store = useSceneStore
   const surfaces = useSceneStore((s) => s.surfaces)
+  const samStatus = useSamStatus()
+  // Shape finding in progress: a box being searched, or "find more".
+  const [pendingBox, setPendingBox] = useState<FrameBox | null>(null)
+  const [findingMore, setFindingMore] = useState(false)
+  const [moreResult, setMoreResult] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>({ kind: 'starting' })
   const [notice, setNotice] = useState<string | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
@@ -208,6 +216,9 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
       return
     }
     setProjecting(false)
+    setPendingBox(null)
+    setFindingMore(false)
+    setMoreResult(null)
     setPhase({ kind: 'shapes', session, asset, detect, fitted, found: null, picks: {} })
     const found = await window.mirrorcat.capture.findShapes(fitted.id).catch(() => [])
     setPhase((current) =>
@@ -267,6 +278,53 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
     onClose()
   }
 
+  /** Add new shapes to the list (picked or not) and pick any existing ones named. */
+  const addShapes = (fittedId: string, added: DetectedShape[], pick: boolean, alsoPick: string[] = []): void => {
+    setPhase((current) => {
+      if (current.kind !== 'shapes' || current.fitted.id !== fittedId || !current.found) return current
+      const picks = { ...current.picks }
+      for (const id of [...(pick ? added.map((s) => s.id) : []), ...alsoPick]) picks[id] = picks[id] ?? 'new'
+      return { ...current, found: [...current.found, ...added], picks }
+    })
+  }
+
+  /** A box around something: find the shape in it and pick it. */
+  const findInBox = async (fitted: MediaAsset, box: FrameBox): Promise<void> => {
+    if (pendingBox) return
+    setPendingBox(box)
+    setNotice(null)
+    try {
+      const result = await window.mirrorcat.capture.findInBox(fitted.id, box)
+      if (result.found === 'new') addShapes(fitted.id, [result.shape], true)
+      else if (result.found === 'existing') addShapes(fitted.id, [], false, [result.shapeId])
+      else setNotice('Couldn’t find one clear shape in that box. Try drawing it close around the edges you want.')
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Couldn’t look in that box.')
+    } finally {
+      setPendingBox(null)
+    }
+  }
+
+  /** The detailed finder over the whole photo; new shapes come in unpicked. */
+  const findMore = async (fitted: MediaAsset): Promise<void> => {
+    setFindingMore(true)
+    setMoreResult(null)
+    setNotice(null)
+    try {
+      const added = await window.mirrorcat.capture.findMore(fitted.id)
+      addShapes(fitted.id, added, false)
+      setMoreResult(
+        added.length === 0
+          ? 'No new shapes. Drag a box around anything still missing.'
+          : `Found ${added.length} more. They’re not picked yet.`
+      )
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'The detailed finder didn’t finish.')
+    } finally {
+      setFindingMore(false)
+    }
+  }
+
   const togglePick = (shapeId: string): void => {
     setPhase((current) => {
       if (current.kind !== 'shapes') return current
@@ -321,7 +379,7 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
       found === null
         ? 'Looking for shapes…'
         : found.length === 0
-          ? 'Didn’t find any flat shapes. You can still project the whole photo, then draw surfaces yourself.'
+          ? 'Didn’t find any flat shapes. Drag a box around something, or project the whole photo.'
           : `Found ${found.length} shape${found.length === 1 ? '' : 's'}. Each one you pick becomes a surface with its corners in place, ready for your own content.`
 
     return (
@@ -344,7 +402,7 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
             </button>
           </header>
           <div className="scan-body scan-photo">
-            {found && found.length > 0 ? (
+            {found ? (
               <ShapePicker
                 imageUrl={mediaUrl(fitted.id)}
                 shapes={found}
@@ -353,6 +411,16 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
                 onToggle={togglePick}
                 onTarget={setTarget}
                 onPickAll={pickAll}
+                onBox={(box) => void findInBox(fitted, box)}
+                pendingBox={pendingBox}
+                footer={
+                  <DetailedFinder
+                    status={samStatus}
+                    busy={findingMore}
+                    result={moreResult}
+                    onFindMore={() => void findMore(fitted)}
+                  />
+                }
               />
             ) : (
               <img
@@ -376,7 +444,7 @@ export default function ScanDialog({ surface, live, onProjected, onClose }: Scan
                 <button
                   type="button"
                   className="btn"
-                  disabled={projecting || pickedCount === 0}
+                  disabled={projecting || pickedCount === 0 || findingMore || pendingBox !== null}
                   onClick={() => void makeSurfaces(fitted, found, picks)}
                 >
                   {projecting

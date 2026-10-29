@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { existsSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { createSurface, type SceneState } from '../src/shared/types'
@@ -318,6 +319,136 @@ test('a surface reaching past the frame offers to fit its image to the frame', a
         { x: 0, y: 1 }
       ])
     await expect(page.getByText('wide-photo (fit to projector)').first()).toBeVisible()
+    expect(run.problems).toEqual([])
+  } finally {
+    await run.close()
+  }
+})
+
+const SAM_DIR = join(
+  process.env.HOME ?? '',
+  'Library',
+  'Application Support',
+  'mirrorcat',
+  'models',
+  'sam2.1-hiera-tiny'
+)
+
+/**
+ * Go live, scan a "photo" of the projected pattern with a dark picture
+ * frame running off the bottom of the frame (art inside it), line it up,
+ * and continue to the shape picker.
+ */
+async function scanFramedPicture(run: Launched): Promise<import('@playwright/test').Locator> {
+  const { page, app } = run
+  const output = await goLive({ app, page })
+  await page.getByRole('button', { name: 'Scan', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Scan with your phone' })
+  await expect(output.getByLabel('Scan pattern')).toBeVisible()
+  await output.waitForTimeout(200)
+  const shot = await output.screenshot()
+  const alt = (await dialog.getByRole('img', { name: /QR code for/ }).getAttribute('alt'))!
+  const url = alt.replace('QR code for ', '')
+  const photo = await page.evaluate(async (png) => {
+    const bitmap = await createImageBitmap(new Blob([new Uint8Array(png)], { type: 'image/png' }))
+    const c = document.createElement('canvas')
+    c.width = 1500
+    c.height = Math.round((1500 * bitmap.height) / bitmap.width)
+    const ctx = c.getContext('2d')!
+    ctx.fillStyle = '#1a1a1a'
+    ctx.fillRect(0, 0, c.width, c.height)
+    ctx.drawImage(bitmap, c.width * 0.1, c.height * 0.1, c.width * 0.8, c.height * 0.8)
+    // The frame: photo 30–60% across, from 40% down past the projector frame's bottom (90%).
+    ctx.fillStyle = '#231f24'
+    ctx.fillRect(c.width * 0.3, c.height * 0.4, c.width * 0.3, c.height * 0.5)
+    ctx.fillStyle = '#245a43'
+    ctx.fillRect(c.width * 0.32, c.height * 0.43, c.width * 0.26, c.height * 0.47)
+    // Cover anything outside the projector frame again (the wall beyond it is dark).
+    ctx.fillStyle = '#1a1a1a'
+    ctx.fillRect(0, c.height * 0.9, c.width, c.height * 0.1)
+    const blob = await new Promise<Blob>((r) => c.toBlob((b) => r(b!), 'image/jpeg', 0.92))
+    return Array.from(new Uint8Array(await blob.arrayBuffer()))
+  }, Array.from(shot))
+  const sent = await fetch(`${url}/photo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/jpeg' },
+    body: new Uint8Array(photo)
+  })
+  expect(sent.status).toBe(200)
+  const lineUp = page.getByRole('dialog', { name: 'Line up the photo' })
+  await expect(lineUp.getByRole('status')).toContainText('Found the projector frame', { timeout: 10000 })
+  await lineUp.getByRole('button', { name: 'Continue' }).click()
+  const picker = page.getByRole('dialog', { name: 'Pick the shapes' })
+  await expect(picker.getByRole('status').first()).toContainText(/Found|Didn’t find/, { timeout: 10000 })
+  return picker
+}
+
+/** Drag a box on the shape stage, in 0..1 of the fitted photo. */
+async function dragBox(
+  picker: import('@playwright/test').Locator,
+  box: { x0: number; y0: number; x1: number; y1: number }
+): Promise<void> {
+  const stage = picker.getByTestId('shape-stage')
+  const r = (await stage.boundingBox())!
+  const page = stage.page()
+  await page.mouse.move(r.x + box.x0 * r.width, r.y + box.y0 * r.height)
+  await page.mouse.down()
+  await page.mouse.move(r.x + ((box.x0 + box.x1) / 2) * r.width, r.y + ((box.y0 + box.y1) / 2) * r.height, { steps: 4 })
+  await page.mouse.move(r.x + box.x1 * r.width, r.y + box.y1 * r.height, { steps: 4 })
+  await page.mouse.up()
+}
+
+/** The frame in the projector frame: (photo − 0.1) / 0.8, running to the bottom. */
+const FRAME = [
+  { x: 0.25, y: 0.375 },
+  { x: 0.625, y: 0.375 },
+  { x: 0.625, y: 1 },
+  { x: 0.25, y: 1 }
+]
+
+async function expectOneSurfaceOnFrame(run: Launched, tolerance: number): Promise<void> {
+  const saved = async (): Promise<SceneState> => JSON.parse(await readFile(join(run.userData, 'scene.json'), 'utf8'))
+  await expect.poll(async () => (await saved()).surfaces.length).toBe(2)
+  const shape = (await saved()).surfaces.find((s) => s.name.startsWith('Shape'))!
+  shape.corners.forEach((c, i) => {
+    expect(Math.abs(c.x - FRAME[i].x)).toBeLessThan(tolerance)
+    expect(Math.abs(c.y - FRAME[i].y)).toBeLessThan(tolerance)
+  })
+}
+
+test('a box around a frame picks the frame, not the art inside it', async () => {
+  const run = await launchApp({ scene: scene(), env: { MIRRORCAT_CAPTURE_HOST: '127.0.0.1', MIRRORCAT_SAM_DIR: '/nonexistent' } })
+  try {
+    const picker = await scanFramedPicture(run)
+    // The detailed finder isn't installed here: it offers the download.
+    await expect(picker.getByRole('button', { name: /Download \(\d+ MB\)/ })).toBeVisible()
+    const pickNone = picker.getByRole('button', { name: 'Pick no shapes' })
+    if (await pickNone.isVisible()) await pickNone.click()
+    await dragBox(picker, { x0: 0.23, y0: 0.35, x1: 0.645, y1: 0.995 })
+    await expect(picker.getByRole('button', { name: 'Make 1 surface' })).toBeVisible()
+    await run.page.screenshot({ path: 'test-results/scan-box.png' })
+    await picker.getByRole('button', { name: 'Make 1 surface' }).click()
+    await expectOneSurfaceOnFrame(run, 0.015)
+    expect(run.problems).toEqual([])
+  } finally {
+    await run.close()
+  }
+})
+
+test('the detailed finder (SAM 2) finds more shapes and answers boxes', async () => {
+  test.skip(!existsSync(SAM_DIR), 'SAM 2 model not downloaded on this machine')
+  test.setTimeout(90_000)
+  const run = await launchApp({ scene: scene(), env: { MIRRORCAT_CAPTURE_HOST: '127.0.0.1', MIRRORCAT_SAM_DIR: SAM_DIR } })
+  try {
+    const picker = await scanFramedPicture(run)
+    await picker.getByRole('button', { name: 'Find more shapes' }).click()
+    await expect(picker.getByRole('status').filter({ hasText: /more\.|No new shapes/ })).toBeVisible({ timeout: 60000 })
+    await picker.getByRole('button', { name: 'Pick no shapes' }).click()
+    await dragBox(picker, { x0: 0.23, y0: 0.35, x1: 0.645, y1: 0.995 })
+    await expect(picker.getByRole('button', { name: 'Make 1 surface' })).toBeVisible({ timeout: 30000 })
+    await run.page.screenshot({ path: 'test-results/scan-sam.png' })
+    await picker.getByRole('button', { name: 'Make 1 surface' }).click()
+    await expectOneSurfaceOnFrame(run, 0.03)
     expect(run.problems).toEqual([])
   } finally {
     await run.close()

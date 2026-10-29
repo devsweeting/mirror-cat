@@ -25,8 +25,8 @@ will cause a real problem if left; "gap" means a missing feature.
   Step 2, phone capture over the LAN (QR), has shipped
   ([phone-capture.md](phone-capture.md), decision 028), then
   registration from projected ArUco markers (029–030) and shapes →
-  surfaces with a built-in finder (031). Next: SAM 2 as a second finder,
-  generated content per shape. Later:
+  surfaces with a built-in finder (031), then SAM 2 as a detailed finder
+  plus boxes (032). Next: generated content per shape. Later:
   Gray-code structured light for per-pixel fit on non-flat objects.
   Mask follow-ups: undo for mask changes, a "grid on masked area only"
   option, smoother brush (pressure, soft brush).

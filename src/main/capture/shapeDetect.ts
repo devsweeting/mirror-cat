@@ -39,7 +39,9 @@ export const SHAPE_MAX_EDGE = 640
 const MIN_AREA = 0.004
 const MAX_AREA = 0.8
 const MIN_SOLIDITY = 0.6
-const DUPLICATE_IOU = 0.7
+// Same region found by two passes overlaps ~0.95; a frame and the picture
+// inside it overlap ~0.8 and are both worth offering.
+const DUPLICATE_IOU = 0.88
 
 /** A shape's pixels (holes filled), cropped to its box, in detection pixels. */
 export interface Region {
@@ -58,6 +60,16 @@ export interface ShapeScan {
   shapes: DetectedShape[]
   /** By shape id, for making exact masks later. */
   regions: Map<string, Region>
+  /** Every candidate before duplicates were merged: a box can pick from these. */
+  pool: Candidate[]
+}
+
+/** A normalized box (0..1 of the frame) drawn around something. */
+export interface Box {
+  x0: number
+  y0: number
+  x1: number
+  y1: number
 }
 
 export function shapeDetectSize(width: number, height: number): { width: number; height: number } {
@@ -86,6 +98,7 @@ export function findShapes(rgba: Uint8Array, width: number, height: number): Sha
   collect(light, width, height, 0, 0, markers, candidates)
   collect(dark, width, height, 0, 0, markers, candidates)
 
+  const pool = [...candidates]
   // Best first, then drop anything that's mostly a shape already kept.
   candidates.sort((a, b) => b.score - a.score)
   const kept: Candidate[] = []
@@ -104,10 +117,99 @@ export function findShapes(rgba: Uint8Array, width: number, height: number): Sha
     shapes.push({ ...c.shape, id })
     regions.set(id, c.region)
   })
-  return { width, height, shapes, regions }
+  return { width, height, shapes, regions, pool }
 }
 
-interface Candidate {
+/**
+ * A candidate from a whole-picture mask (a SAM 2 answer, 1 = inside, at
+ * the scan's size): its largest piece, holes filled, fitted like any other
+ * region. Organic shapes are allowed to be less solid than the built-in
+ * finder's. `maxBorders` is how many photo sides it may touch.
+ */
+export function candidateFromMask(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  {
+    minSolidity = 0.35,
+    maxBorders = 1,
+    maxArea = MAX_AREA
+  }: { minSolidity?: number; maxBorders?: number; maxArea?: number } = {}
+): Candidate | null {
+  const total = width * height
+  const { labels, components } = label(mask, width, height)
+  let biggest: Component | null = null
+  for (const c of components) if (!biggest || c.count > biggest.count) biggest = c
+  if (!biggest || biggest.count < total * MIN_AREA || biggest.count > total * maxArea) return null
+  if (bitCount(biggest.borders) > maxBorders) return null
+  const region = regionOf(labels, biggest, width, height, 0)
+  if (region.count > total * maxArea) return null
+  const candidate = describe(region, width, height, 0.1, minSolidity)
+  if (!candidate) return null
+  const markers = markerZones(width, height)
+  if (markers.some((z) => candidate.cx > z.x0 && candidate.cx < z.x1 && candidate.cy > z.y0 && candidate.cy < z.y1)) {
+    return null
+  }
+  return candidate
+}
+
+/**
+ * Add candidates to a scan as new shapes (numbered after the ones it has).
+ * One that's mostly a shape already there comes back in `existing`
+ * instead, so a box drawn around a known shape just picks it.
+ */
+export function addCandidates(
+  scan: ShapeScan,
+  candidates: Candidate[],
+  limit = MAX_SHAPES
+): { added: DetectedShape[]; existing: DetectedShape[] } {
+  const added: DetectedShape[] = []
+  const existing: DetectedShape[] = []
+  let next = scan.shapes.reduce((n, s) => Math.max(n, Number(s.id.replace(/\D/g, '')) || 0), 0) + 1
+  for (const c of [...candidates].sort((a, b) => b.score - a.score)) {
+    const match = scan.shapes.find((s) => iou(scan.regions.get(s.id)!, c.region) >= DUPLICATE_IOU)
+    if (match) {
+      if (!existing.includes(match) && !added.includes(match)) existing.push(match)
+      continue
+    }
+    if (added.length >= limit) continue
+    const shape: DetectedShape = { ...c.shape, id: `shape-${next++}` }
+    scan.shapes.push(shape)
+    scan.regions.set(shape.id, c.region)
+    added.push(shape)
+  }
+  return { added, existing }
+}
+
+/**
+ * The built-in finder's best answer for a box: the candidate (from any
+ * pass, merged or not) whose outline's bounds match the box best. Null
+ * when nothing matches it at least half.
+ */
+export function bestInBox(scan: ShapeScan, box: Box): Candidate | null {
+  let best: Candidate | null = null
+  let bestScore = 0.5
+  for (const c of scan.pool) {
+    const xs = c.shape.outline.map((p) => p.x)
+    const ys = c.shape.outline.map((p) => p.y)
+    const score = boxIou(box, { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) })
+    if (score > bestScore) {
+      bestScore = score
+      best = c
+    }
+  }
+  return best
+}
+
+function boxIou(a: Box, b: Box): number {
+  const ix = Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0))
+  const iy = Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0))
+  const both = ix * iy
+  const area = (r: Box): number => Math.max(0, r.x1 - r.x0) * Math.max(0, r.y1 - r.y0)
+  return both / Math.max(1e-9, area(a) + area(b) - both)
+}
+
+export interface Candidate {
   shape: Omit<DetectedShape, 'id'>
   region: Region
   score: number
@@ -140,14 +242,20 @@ function collect(
   }
 }
 
-function describe(region: Region, width: number, height: number, bonus: number): Candidate | null {
+function describe(
+  region: Region,
+  width: number,
+  height: number,
+  bonus: number,
+  minSolidity = MIN_SOLIDITY
+): Candidate | null {
   const outline = traceOutline(region)
   if (outline.length < 8) return null
   const hull = convexHull(outline)
   const hullArea = polygonArea(hull)
   // Pixel counts include half a pixel around the traced centres.
   const solidity = region.count / (hullArea + perimeter(hull) / 2 + 1)
-  if (solidity < MIN_SOLIDITY) return null
+  if (solidity < minSolidity) return null
 
   let cx = 0
   let cy = 0
@@ -414,14 +522,29 @@ function regionOf(labels: Int32Array, comp: Component, width: number, height: nu
     }
   }
   for (let g = 0; g < grow; g++) data = dilate(data, rw, rh, 0, 0, rw, rh)
-  fillHoles(data, rw, rh)
+  // Where the box meets the photo's edge, the edge closes the shape: a frame
+  // cut off by the bottom of the photo still has a middle.
+  fillHoles(data, rw, rh, {
+    left: x0 > 0,
+    right: x0 + rw < width,
+    top: y0 > 0,
+    bottom: y0 + rh < height
+  })
   let count = 0
   for (const v of data) count += v
   return { x: x0, y: y0, width: rw, height: rh, data, count }
 }
 
-/** Fill every 0 that can't reach the box's edge (holes: a picture inside its frame). */
-function fillHoles(data: Uint8Array, width: number, height: number): void {
+/**
+ * Fill every 0 that can't reach the box's open sides (holes: a picture
+ * inside its frame). Sides that are the photo's own edge count as closed.
+ */
+function fillHoles(
+  data: Uint8Array,
+  width: number,
+  height: number,
+  open = { left: true, right: true, top: true, bottom: true }
+): void {
   const outside = new Uint8Array(data.length)
   const queue = new Int32Array(data.length)
   let tail = 0
@@ -432,12 +555,12 @@ function fillHoles(data: Uint8Array, width: number, height: number): void {
     }
   }
   for (let x = 0; x < width; x++) {
-    seed(x)
-    seed((height - 1) * width + x)
+    if (open.top) seed(x)
+    if (open.bottom) seed((height - 1) * width + x)
   }
   for (let y = 0; y < height; y++) {
-    seed(y * width)
-    seed(y * width + width - 1)
+    if (open.left) seed(y * width)
+    if (open.right) seed(y * width + width - 1)
   }
   for (let head = 0; head < tail; head++) {
     const i = queue[head]

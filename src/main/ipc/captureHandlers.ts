@@ -12,11 +12,7 @@ import { getOutputWindow } from '../windows/outputWindow'
 import { bgraToRgba, detectSize, locateFrame } from '../capture/frameDetect'
 import { rectifiedSize, rectifyQuad } from '../capture/rectify'
 import type { CornerSet } from '../../shared/types'
-import type { DetectedShape } from '../../shared/shapes'
-import { MASK_PAINT_EDGE } from '../../shared/mask'
-import { cornersAspect } from '../../shared/proportionalResize'
-import type { MaskStore } from '../masks/maskStore'
-import { findShapes, regionMask, shapeDetectSize, type ShapeScan } from '../capture/shapeDetect'
+import { stopShapeFinder } from './shapeHandlers'
 import { requireControlWindow } from './trust'
 
 let active: CaptureServer | null = null
@@ -32,6 +28,7 @@ function showPattern(on: boolean): void {
 function stopActive(): void {
   active?.stop()
   active = null
+  stopShapeFinder()
   if (patternOn) showPattern(false)
 }
 
@@ -73,15 +70,7 @@ function captureAddress(): LanAddress | null {
  * Scan (phone capture). One scan link at a time, opened and closed by the
  * editor's Scan dialog; the server never outlives the dialog or the editor.
  */
-export function registerCaptureHandlers({
-  library,
-  masks
-}: {
-  library: MediaLibrary
-  masks: MaskStore
-}): void {
-  // The last shape scan, kept so "make surfaces" can cut exact masks from it.
-  let lastShapes: { assetId: string; scan: ShapeScan } | null = null
+export function registerCaptureHandlers({ library }: { library: MediaLibrary }): void {
 
   const send = (event: CaptureEvent): void => {
     const win = getControlWindow()
@@ -186,52 +175,6 @@ export function registerCaptureHandlers({
       const jpeg = nativeImage.createFromBitmap(pixels, size).toJPEG(92)
       const base = asset.name.replace(/ \(fit to projector\)$/, '')
       return library.importBuffer(jpeg, { name: `${base} (fit to projector)`, source: 'upload' })
-    }
-  )
-
-  // Finds flat shapes in a scan image that's been fitted to the projector,
-  // so each can become a surface. ~50–150 ms at 640 px; main thread for now.
-  ipcMain.handle(IpcChannels.CaptureFindShapes, (event, id: unknown): DetectedShape[] => {
-    requireControlWindow(event)
-    const asset = typeof id === 'string' && ASSET_ID_PATTERN.test(id) ? library.get(id) : undefined
-    if (!asset || asset.kind !== 'image') return []
-    const image = nativeImage.createFromPath(library.filePath(asset))
-    if (image.isEmpty()) return []
-    const size = shapeDetectSize(image.getSize().width, image.getSize().height)
-    const pixels = bgraToRgba(image.resize({ ...size, quality: 'good' }).toBitmap())
-    try {
-      const scan = findShapes(pixels, size.width, size.height)
-      lastShapes = { assetId: asset.id, scan }
-      return scan.shapes
-    } catch (error) {
-      console.error('[capture] shape finding failed', error)
-      return []
-    }
-  })
-
-  // An exact mask for one found shape, in the space of a surface with these
-  // corners, stored like any other mask. Null if that scan is gone (the app
-  // restarted) or the corners don't make a shape.
-  ipcMain.handle(
-    IpcChannels.CaptureShapeMask,
-    async (event, assetId: unknown, shapeId: unknown, corners: unknown): Promise<string | null> => {
-      requireControlWindow(event)
-      const fitted = parseCorners(corners)
-      if (!lastShapes || lastShapes.assetId !== assetId || typeof shapeId !== 'string' || !fitted) return null
-      const { scan } = lastShapes
-      const region = scan.regions.get(shapeId)
-      if (!region) return null
-      const aspect = Math.min(8, Math.max(1 / 8, cornersAspect(fitted, scan.width, scan.height)))
-      const width = Math.round(aspect >= 1 ? MASK_PAINT_EDGE : MASK_PAINT_EDGE * aspect)
-      const height = Math.round(aspect >= 1 ? MASK_PAINT_EDGE / aspect : MASK_PAINT_EDGE)
-      const gray = regionMask(region, scan.width, scan.height, fitted, width, height)
-      if (!gray) return null
-      const bgra = Buffer.alloc(width * height * 4)
-      for (let i = 0; i < gray.length; i++) {
-        bgra[i * 4] = bgra[i * 4 + 1] = bgra[i * 4 + 2] = gray[i]
-        bgra[i * 4 + 3] = 255
-      }
-      return masks.save(nativeImage.createFromBitmap(bgra, { width, height }).toPNG())
     }
   )
 

@@ -71,10 +71,15 @@ a **New surface** or onto an existing one (**Move Vase here**).
 - Then drop your own content on each surface.
 - **Project the whole photo** is still there for using the photo itself.
 
-The built-in finder handles flat, solid, reasonably high-contrast
-shapes. Organic or low-contrast objects (plants, a white box on a white
-wall) are what SAM 2 is for (next). Until then, draw those with the mask
-tools.
+**Drag a box** around anything it missed, or around the thing you mean
+when it picked the wrong part (the frame, not the picture in it). The
+shape in the box is added and picked.
+
+The built-in finder handles flat, solid, reasonably high-contrast shapes.
+The **detailed finder** (SAM 2, decision 032) is a one-time ~155 MB
+download from the picker that runs on this computer. Once it's installed,
+**Find more shapes** looks for curved, organic and low-contrast shapes
+(~6 s), and boxes use it for exact outlines.
 
 ## How it's built
 
@@ -86,6 +91,7 @@ tools.
 | IPC | `main/ipc/captureHandlers.ts` -- `capture:start` / `capture:stop` (control window only), `capture:event` to the editor |
 | QR code | `qrcode` (MIT), rendered as SVG in main, shown as a data: image |
 | Dialog | `renderer/components/ScanDialog.tsx`, `FrameCornersEditor.tsx`, `styles/scan.css` |
+| Detailed finder (SAM 2) | `main/segment/` -- `samModel.ts` (pinned download + checksums), `samWorker.ts` (onnxruntime-node in a utilityProcess), `samClient.ts`, `samMasks.ts`; `main/ipc/shapeHandlers.ts`; `components/DetailedFinder.tsx` |
 | Shape finding | `shared/shapes.ts` (geometry), `main/capture/shapeDetect.ts` (regions, quads, masks), `components/ShapePicker.tsx`; IPC `capture:find-shapes`, `capture:shape-mask` |
 | Scan pattern + frame detection | `shared/scanPattern.ts`, `shared/homography.ts`, `main/capture/frameDetect.ts`, `components/ScanPattern.tsx` (projector) |
 
@@ -137,9 +143,9 @@ have no Wi-Fi.
 
 ## Next
 
-- SAM 2 as a second shape finder, for organic and low-contrast shapes:
-  its masks feed the same picker. Also tap-to-add a shape the finder
-  missed, and merge shapes it split.
+- Merge shapes the finders split; click-to-refine a SAM outline (add or
+  remove points).
+- GPU for the detailed finder (CoreML / DirectML execution providers).
 - Generative content per shape: the photo crop and the shape's mask as
   the prompt's canvas.
 - Run frame and shape detection in a worker (main thread today).

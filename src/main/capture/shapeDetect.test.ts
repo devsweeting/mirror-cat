@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findShapes, regionMask, shapeDetectSize } from './shapeDetect'
+import { addCandidates, bestInBox, candidateFromMask, findShapes, regionMask, shapeDetectSize } from './shapeDetect'
 import { markerPlacements } from '../../shared/scanPattern'
 import { pointInPolygon, type DetectedShape } from '../../shared/shapes'
 import type { Point } from '../../shared/homography'
@@ -92,6 +92,22 @@ describe('findShapes', () => {
     expect(inner).toHaveLength(1)
   })
 
+  it('finds a frame cut off by the bottom of the photo, not just the picture inside', () => {
+    // Devin's scan: a dark frame running off the bottom, green art inside.
+    const rgba = wall()
+    paint(rgba, (x, y) => x >= 200 && x < 560 && y >= 110, 35)
+    paint(rgba, (x, y) => x >= 216 && x < 544 && y >= 126, 60)
+    const { shapes } = findShapes(rgba, W, H)
+    const frame = shapes.find((s) => s.kind === 'quad' && s.corners[0].x * W < 205)
+    expect(frame).toBeDefined()
+    const corners = frame!.corners.map(px)
+    expect(Math.abs(corners[0].x - 200)).toBeLessThan(3)
+    expect(Math.abs(corners[0].y - 110)).toBeLessThan(3)
+    expect(corners[2].y).toBeGreaterThan(H - 3)
+    // The picture inside is offered too.
+    expect(shapes.some((s) => s.kind === 'quad' && Math.abs(s.corners[0].x * W - 216) < 3)).toBe(true)
+  })
+
   it('ignores the wall, the scan pattern’s markers and specks', () => {
     const rgba = wall()
     for (const m of markerPlacements(W, H)) {
@@ -111,6 +127,49 @@ describe('findShapes', () => {
     expect(shapes.map((s) => s.id)).toEqual(['shape-1', 'shape-2', 'shape-3'])
     expect(shapes[0].corners[0].x).toBeLessThan(shapes[1].corners[0].x)
     expect(shapes[2].corners[0].y).toBeGreaterThan(shapes[0].corners[0].y)
+  })
+})
+
+describe('candidates from masks and boxes', () => {
+  /** A whole-picture mask (like a SAM answer) with a speck off to the side. */
+  function circleMask(cx: number, cy: number, r: number): Uint8Array {
+    const m = new Uint8Array(W * H)
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (Math.hypot(x - cx, y - cy) < r) m[y * W + x] = 1
+    m[5 * W + 300] = 1
+    return m
+  }
+
+  it('turns a mask into a traced shape, ignoring stray specks', () => {
+    const c = candidateFromMask(circleMask(450, 180, 60), W, H)!
+    expect(c.shape.kind).toBe('outline')
+    expect(c.shape.area).toBeCloseTo((Math.PI * 60 * 60) / (W * H), 2)
+  })
+
+  it('adds new shapes after the ones found, and recognises one already there', () => {
+    const rgba = wall()
+    paint(rgba, (x, y) => x >= 100 && x < 220 && y >= 100 && y < 220, 40)
+    const scan = findShapes(rgba, W, H)
+    expect(scan.shapes.map((s) => s.id)).toEqual(['shape-1'])
+    const round = candidateFromMask(circleMask(450, 180, 60), W, H)!
+    const square = new Uint8Array(W * H)
+    for (let y = 100; y < 220; y++) for (let x = 100; x < 220; x++) square[y * W + x] = 1
+    const { added, existing } = addCandidates(scan, [round, candidateFromMask(square, W, H)!])
+    expect(added.map((s) => s.id)).toEqual(['shape-2'])
+    expect(existing.map((s) => s.id)).toEqual(['shape-1'])
+    expect(scan.regions.has('shape-2')).toBe(true)
+  })
+
+  it('a box picks the frame around a picture, not the picture', () => {
+    // A frame cut off by the photo's bottom edge, a picture inside it.
+    const rgba = wall()
+    paint(rgba, (x, y) => x >= 200 && x < 560 && y >= 110, 35)
+    paint(rgba, (x, y) => x >= 216 && x < 544 && y >= 126, 60)
+    const scan = findShapes(rgba, W, H)
+    const frameBox = { x0: 195 / W, y0: 105 / H, x1: 565 / W, y1: 1 }
+    const pictureBox = { x0: 214 / W, y0: 124 / H, x1: 546 / W, y1: 1 }
+    expect(bestInBox(scan, frameBox)!.shape.corners[0].x * W).toBeCloseTo(200, -1)
+    expect(bestInBox(scan, pictureBox)!.shape.corners[0].x * W).toBeCloseTo(216, -1)
+    expect(bestInBox(scan, { x0: 0.02, y0: 0.4, x1: 0.1, y1: 0.5 })).toBeNull()
   })
 })
 

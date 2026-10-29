@@ -14,6 +14,7 @@ import type {
 } from '../shared/ai'
 import type { CaptureEvent, CaptureStartResult, FrameDetection } from '../shared/capture'
 import type { DetectedShape } from '../shared/shapes'
+import type { BoxResult, FrameBox, SamStatus } from '../shared/sam'
 
 export interface MirrorCatMediaApi {
   list(): Promise<MediaAsset[]>
@@ -55,6 +56,15 @@ export interface MirrorCatCaptureApi {
   findShapes(assetId: string): Promise<DetectedShape[]>
   /** Mask id for a found shape on a surface with these corners, or null. */
   shapeMask(assetId: string, shapeId: string, corners: CornerSet): Promise<string | null>
+  /** More shapes from the detailed finder (SAM 2), numbered after the ones found. */
+  findMore(assetId: string): Promise<DetectedShape[]>
+  /** The shape inside a box (0..1 of the frame). */
+  findInBox(assetId: string, box: FrameBox): Promise<BoxResult>
+  samStatus(): Promise<SamStatus>
+  /** Download the detailed finder's model; resolves when it's done (or failed/cancelled). */
+  samDownload(): Promise<SamStatus>
+  samCancel(): Promise<SamStatus>
+  onSamStatus(callback: (status: SamStatus) => void): () => void
   /** Projector window: draw the scan pattern or not. */
   onPattern(callback: (on: boolean) => void): () => void
 }
