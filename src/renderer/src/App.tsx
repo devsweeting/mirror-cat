@@ -352,7 +352,14 @@ export default function App() {
         {libraryOpen && <LibraryPanel targetSurfaceId={effectiveSurfaceId} />}
       </div>
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
-      {scanOpen && <ScanDialog surface={selectedSurface} onClose={() => setScanOpen(false)} />}
+      {scanOpen && (
+        <ScanDialog
+          surface={selectedSurface}
+          live={live}
+          onProjected={setSelectedSurfaceId}
+          onClose={() => setScanOpen(false)}
+        />
+      )}
     </div>
   )
 }

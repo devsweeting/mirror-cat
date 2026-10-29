@@ -534,3 +534,35 @@ the Host header, and is size- and count-capped. Long form:
 rejection, stop and expiry) and `e2e/scan.spec.ts` (phone page, upload,
 Put on surface, link closes with the dialog; refused upload).
 
+## 029 Scan lines up with the projector via projected markers
+*2026-10-28 · Accepted*
+
+**Context.** Devin asked whether the phone should show a box with the
+projector's aspect ratio to frame the photo. The goal is right: know
+exactly how the photo maps onto the projector. But the phone's own camera
+can't show an overlay from a web page (a live viewfinder needs HTTPS). A
+fixed rectangle would also only match from exactly the lens position;
+from anywhere else the frame appears as a slanted quadrilateral.
+
+**Decision.** The projector draws the box instead: while a scan waits, it
+shows a glowing frame with an ArUco marker in each corner. Main finds the
+markers in the photo (js-aruco2), fits a frame → photo homography through
+all marker corners, and the dialog shows the frame outlined for checking
+(corners draggable and arrow-nudgeable, missing ones highlighted). "Project
+onto the wall" makes a surface whose perspective warp is exactly the photo
+→ projector mapping.
+
+**Considered.** A phone-side guide box (no overlay over the native camera;
+inaccurate off-axis); a live viewfinder over HTTPS (certificate friction);
+OpenCV.js (8 MB, more than needed); tapping four corners only (kept as the
+fallback); detection in the renderer (js-aruco2 is CommonJS with a
+top-level `this`, which breaks in the browser bundle -- and main can decode
+with `nativeImage`).
+
+**Verified by** `main/capture/frameDetect.test.ts` (synthetic off-axis
+photos: all four markers within 6 px; one marker hidden, within 12 px and
+flagged estimated; no pattern → no corners; marker bits match the
+library), `shared/homography.test.ts`, and the live-scan case in
+`e2e/scan.spec.ts` (pattern on the projector, frame found at the expected
+spot, nudge, project, corners as predicted).
+

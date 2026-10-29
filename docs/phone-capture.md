@@ -18,6 +18,38 @@ removal, and the mask that already lines up (step 1, decision 024).
 The dialog shows live status: waiting for your phone, phone connected,
 receiving the photo, or why a photo was refused.
 
+## Lining the photo up with the projector
+
+When you're live, the projector shows a **scan pattern** while the dialog
+waits for a photo (`shared/scanPattern.ts`, drawn by
+`components/ScanPattern.tsx`): soft gray light to see the object by, a
+bright border, and an ArUco marker (ARUCO_MIP_36h12, ids 0–3) inset in
+each corner. The phone page then asks you to fit the whole glowing frame
+in the photo.
+
+When the photo arrives:
+
+1. **Find the frame.** Main decodes the photo (`nativeImage`), scans it at
+   ≤1600 px with js-aruco2 (MIT), and pairs each found marker's four
+   corners with where it was drawn. `fitHomography` (`shared/homography.ts`,
+   a normalized least-squares fit) gives frame → photo from all 16 points,
+   and the frame's corners come out of it (`main/capture/frameDetect.ts`).
+   Two markers are enough. With fewer than four found, the result is
+   flagged "estimated" and the missing corners are highlighted. The frame
+   size is the projector window's, since that's what the pattern filled.
+2. **Check it.** The dialog shows the photo with the frame outlined
+   (`FrameCornersEditor`). Drag a corner, or use the arrow keys (Shift for
+   bigger steps), to fix it. If nothing was found you start from a guess.
+3. **Project onto the wall.** This makes a "Scan" surface whose corners are
+   the photo's own corners mapped into the frame (`photoSurfaceCorners`:
+   the inverse of the unit-square → frame-in-photo homography). Its
+   perspective warp reproduces that mapping exactly, so every photo pixel
+   lands on the projector pixel that lit it. The objects light up with
+   their own image, which is the accuracy check, and you can outline an
+   object in mask mode right over its photo.
+
+Not live: no pattern, and the photo can go on a surface as-is.
+
 ## How it's built
 
 | Piece | Where |
@@ -27,7 +59,8 @@ receiving the photo, or why a photo was refused.
 | Phone page | `main/capture/phonePage.ts` -- self-contained HTML, nonce CSP |
 | IPC | `main/ipc/captureHandlers.ts` -- `capture:start` / `capture:stop` (control window only), `capture:event` to the editor |
 | QR code | `qrcode` (MIT), rendered as SVG in main, shown as a data: image |
-| Dialog | `renderer/components/ScanDialog.tsx`, `styles/scan.css` |
+| Dialog | `renderer/components/ScanDialog.tsx`, `FrameCornersEditor.tsx`, `styles/scan.css` |
+| Scan pattern + frame detection | `shared/scanPattern.ts`, `shared/homography.ts`, `main/capture/frameDetect.ts`, `components/ScanPattern.tsx` (projector) |
 
 **Why a file input, not a live camera view.** `getUserMedia` needs a
 secure context, and a page on `http://192.168.x.x` isn't one, so a live
@@ -77,8 +110,7 @@ have no Wi-Fi.
 
 ## Next
 
-- Projected ArUco markers while scanning, so the photo maps onto projector
-  pixels automatically.
 - Tap-to-select (SAM 2) on the photo, writing the selection into the
-  surface's mask.
+  surface's mask through the same photo → frame mapping.
+- Run frame detection in a worker (it's ~0.3 s on the main thread today).
 - Later: Gray-code structured light for a per-pixel fit.

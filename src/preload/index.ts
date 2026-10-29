@@ -14,7 +14,7 @@ import type {
   AnimationSettings,
   SetKeyResult
 } from '../shared/ai'
-import type { CaptureEvent, CaptureStartResult } from '../shared/capture'
+import type { CaptureEvent, CaptureStartResult, FrameDetection } from '../shared/capture'
 
 const media = {
   list: (): Promise<MediaAsset[]> => ipcRenderer.invoke(IpcChannels.MediaList),
@@ -75,6 +75,17 @@ const masks = {
 const capture = {
   start: (): Promise<CaptureStartResult> => ipcRenderer.invoke(IpcChannels.CaptureStart),
   stop: (): Promise<boolean> => ipcRenderer.invoke(IpcChannels.CaptureStop),
+  /** Show or hide the scan pattern on the projector. */
+  setPattern: (on: boolean): Promise<boolean> => ipcRenderer.invoke(IpcChannels.CapturePattern, on),
+  /** Where the projector frame is in a scan photo (needs the projector open). */
+  detectFrame: (assetId: string): Promise<FrameDetection> =>
+    ipcRenderer.invoke(IpcChannels.CaptureDetectFrame, assetId),
+  /** Projector window: draw the scan pattern or not. */
+  onPattern: (callback: (on: boolean) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, on: boolean): void => callback(on)
+    ipcRenderer.on(IpcChannels.CapturePatternShow, listener)
+    return () => ipcRenderer.removeListener(IpcChannels.CapturePatternShow, listener)
+  },
   onEvent: (callback: (event: CaptureEvent) => void): (() => void) => {
     const listener = (_event: Electron.IpcRendererEvent, payload: CaptureEvent): void =>
       callback(payload)

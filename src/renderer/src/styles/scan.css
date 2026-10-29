@@ -189,3 +189,114 @@
     animation: none;
   }
 }
+
+/* Projector window: the scan pattern covers everything while a scan waits. */
+.scan-pattern {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Line up the photo: wider dialog, the photo with the frame outlined. */
+.scan-dialog-wide {
+  width: min(760px, 100%);
+}
+
+.scan-photo-image.finding {
+  opacity: 0.6;
+}
+
+.scan-status.warn {
+  color: var(--bulb);
+}
+
+.frame-editor {
+  display: grid;
+  place-items: center;
+  max-height: 440px;
+  padding: 10px;
+  background: #000;
+  border-radius: var(--radius-md);
+}
+
+/* Takes the photo's aspect ratio, so 0..1 coordinates match the image. */
+.frame-editor-box {
+  position: relative;
+  width: 100%;
+  max-height: 420px;
+}
+
+.frame-editor-box img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  user-select: none;
+}
+
+.frame-editor-outline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.frame-editor-shade {
+  fill: color-mix(in srgb, var(--eye-cyan) 12%, transparent);
+}
+
+.frame-editor-halo {
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 4;
+}
+
+.frame-editor-line {
+  fill: none;
+  stroke: var(--eye-cyan);
+  stroke-width: 2;
+}
+
+.frame-editor-handle {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  padding: 0;
+  background: transparent;
+  border: 2px solid var(--eye-cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.6);
+  cursor: grab;
+  touch-action: none;
+}
+
+.frame-editor-handle::after {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--eye-cyan);
+}
+
+.frame-editor-handle.unsure {
+  border-color: var(--bulb);
+}
+
+.frame-editor-handle.unsure::after {
+  background: var(--bulb);
+}
+
+.frame-editor-handle:focus-visible {
+  outline: 2px solid var(--plaster);
+  outline-offset: 3px;
+}
+
+.frame-editor-handle:active {
+  cursor: grabbing;
+}

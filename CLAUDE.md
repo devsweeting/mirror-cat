@@ -93,7 +93,12 @@ TypeScript + React + Three.js:
     QR code for a short-lived, token-gated page on the home network
     (one LAN address, random port, open only while the dialog is). The
     phone uploads a ≤4096 px JPEG into the library. Dev override:
-    MIRRORCAT_CAPTURE_HOST=127.0.0.1.
+    MIRRORCAT_CAPTURE_HOST=127.0.0.1. When live, the projector shows a
+    scan pattern (glowing frame + ArUco markers, `shared/scanPattern.ts`);
+    main finds the frame (`main/capture/frameDetect.ts`, js-aruco2 --
+    CommonJS, import its default), the dialog lets you check corners,
+    and "Project onto the wall" makes a surface that re-projects the
+    photo exactly (`photoSurfaceCorners`, decision 029).
   - Settings › AI & animation (`components/settings/`, `main/ai/`,
     `shared/ai.ts`; docs/ai-settings.md): provider keys checked with a free
     request, encrypted with safeStorage in main, never returned to the

@@ -1,20 +1,34 @@
-import { app, ipcMain } from 'electron'
+import { app, ipcMain, nativeImage } from 'electron'
 import { networkInterfaces } from 'os'
 import QRCode from 'qrcode'
 import { IpcChannels } from '../../shared/ipcChannels'
-import type { CaptureEvent, CaptureStartResult } from '../../shared/capture'
+import type { CaptureEvent, CaptureStartResult, FrameDetection } from '../../shared/capture'
+import { ASSET_ID_PATTERN } from '../../shared/media'
 import type { MediaLibrary } from '../media/mediaLibrary'
 import { CaptureServer } from '../capture/captureServer'
 import { pickLanAddress, type LanAddress } from '../capture/lanAddress'
 import { getControlWindow } from '../windows/controlWindow'
+import { getOutputWindow } from '../windows/outputWindow'
+import { bgraToRgba, detectSize, locateFrame } from '../capture/frameDetect'
 import { requireControlWindow } from './trust'
 
 let active: CaptureServer | null = null
+/** Whether the projector should show the scan pattern (replayed if it reopens). */
+let patternOn = false
+
+function showPattern(on: boolean): void {
+  patternOn = on
+  const out = getOutputWindow()
+  if (out && !out.isDestroyed()) out.webContents.send(IpcChannels.CapturePatternShow, on)
+}
 
 function stopActive(): void {
   active?.stop()
   active = null
+  if (patternOn) showPattern(false)
 }
+
+const NO_FRAME: FrameDetection = { corners: null, markersFound: [], estimated: true }
 
 /**
  * Where to listen. Development builds can force an address with
@@ -59,7 +73,8 @@ export function registerCaptureHandlers({ library }: { library: MediaLibrary }):
       onEvent: (e) => {
         if (e.type === 'expired' && active === server) active = null
         send(e)
-      }
+      },
+      frameShown: () => patternOn
     })
     try {
       const { url, expiresAt } = await server.start()
@@ -82,6 +97,33 @@ export function registerCaptureHandlers({ library }: { library: MediaLibrary }):
     }
   })
 
+  ipcMain.handle(IpcChannels.CapturePattern, (event, on: unknown) => {
+    requireControlWindow(event)
+    showPattern(on === true)
+    return true
+  })
+
+  // Finds the projector frame in a scan photo. Runs on the main thread:
+  // ~0.3 s for a 1600 px scan, once per photo (a worker is a follow-up).
+  ipcMain.handle(IpcChannels.CaptureDetectFrame, (event, id: unknown): FrameDetection => {
+    requireControlWindow(event)
+    const asset = typeof id === 'string' && ASSET_ID_PATTERN.test(id) ? library.get(id) : undefined
+    const out = getOutputWindow()
+    if (!asset || asset.kind !== 'image' || !out || out.isDestroyed()) return NO_FRAME
+    // The pattern was drawn to fill the projector window, so that's the frame.
+    const [frameWidth, frameHeight] = out.getContentSize()
+    const image = nativeImage.createFromPath(library.filePath(asset))
+    if (image.isEmpty()) return NO_FRAME
+    const size = detectSize(image.getSize().width, image.getSize().height)
+    const pixels = bgraToRgba(image.resize({ ...size, quality: 'good' }).toBitmap())
+    try {
+      return locateFrame(pixels, size.width, size.height, frameWidth, frameHeight)
+    } catch (error) {
+      console.error('[capture] frame detection failed', error)
+      return NO_FRAME
+    }
+  })
+
   ipcMain.handle(IpcChannels.CaptureStop, (event) => {
     requireControlWindow(event)
     stopActive()
@@ -92,6 +134,12 @@ export function registerCaptureHandlers({ library }: { library: MediaLibrary }):
   app.on('browser-window-created', (_e, win) => {
     win.on('closed', () => {
       if (!getControlWindow()) stopActive()
+    })
+    // A projector window opened mid-scan picks the pattern up.
+    win.webContents.on('did-finish-load', () => {
+      if (patternOn && win === getOutputWindow()) {
+        win.webContents.send(IpcChannels.CapturePatternShow, true)
+      }
     })
   })
 }

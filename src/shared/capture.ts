@@ -36,3 +36,22 @@ export type CaptureEvent =
   | { type: 'photo'; asset: MediaAsset }
   | { type: 'rejected'; message: string }
   | { type: 'expired' }
+
+/** Where the projector frame was found in a scan photo. */
+export interface FrameDetection {
+  /**
+   * The frame's corners in the photo, 0..1 of its width and height
+   * (top-left, top-right, bottom-right, bottom-left), or null when too few
+   * markers were found to place it.
+   */
+  corners: [
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number }
+  ] | null
+  /** Marker ids found: 0 top-left, 1 top-right, 2 bottom-right, 3 bottom-left. */
+  markersFound: number[]
+  /** True unless all four markers were found -- worth a look before using. */
+  estimated: boolean
+}

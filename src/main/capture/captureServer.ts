@@ -16,6 +16,8 @@ export interface CaptureServerOptions {
   /** Store an uploaded photo (the media library's byte-checked import). */
   importPhoto: (bytes: Buffer) => Promise<MediaAsset>
   onEvent: (event: CaptureEvent) => void
+  /** Whether the projector is showing the scan pattern right now (changes the phone's instructions). */
+  frameShown?: () => boolean
   sessionMs?: number
 }
 
@@ -101,7 +103,8 @@ export class CaptureServer {
         'Content-Security-Policy',
         `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; img-src blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`
       )
-      return send(res, 200, 'text/html; charset=utf-8', phonePageHtml(nonce))
+      const frameShown = this.options.frameShown?.() ?? false
+      return send(res, 200, 'text/html; charset=utf-8', phonePageHtml(nonce, { frameShown }))
     }
 
     if (match[2] && req.method === 'POST') return this.receivePhoto(req, res)

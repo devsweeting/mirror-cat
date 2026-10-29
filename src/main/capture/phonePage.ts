@@ -6,7 +6,10 @@
  * of at most 4096 px -- which also converts iPhone HEIC and applies the
  * photo's rotation -- and posts it back to the same URL + "/photo".
  */
-export function phonePageHtml(nonce: string): string {
+export function phonePageHtml(nonce: string, { frameShown = false } = {}): string {
+  const framingStep = frameShown
+    ? 'Fit the <strong>whole glowing frame</strong> in the photo, object inside it.'
+    : 'Fit the <strong>whole object</strong> in the frame.'
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -42,7 +45,7 @@ export function phonePageHtml(nonce: string): string {
   <ol id="steps">
     <li><span><strong>Stand right beside the projector</strong>, so the photo sees what the projector sees.</span></li>
     <li><span>Use the <strong>1× lens</strong> and hold the phone level.</span></li>
-    <li><span>Fit the <strong>whole object</strong> in the frame.</span></li>
+    <li><span>${framingStep}</span></li>
   </ol>
   <img id="preview" class="preview" alt="The photo you took">
   <label class="take" id="take">

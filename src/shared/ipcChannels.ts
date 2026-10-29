@@ -36,6 +36,12 @@ export const IpcChannels = {
   CaptureStop: 'capture:stop',
   /** Main → control window: the phone opened the page, sent a photo, etc. */
   CaptureEvent: 'capture:event',
+  /** Control window → main: show or hide the scan pattern on the projector. */
+  CapturePattern: 'capture:pattern',
+  /** Main → output window: draw (or stop drawing) the scan pattern. */
+  CapturePatternShow: 'capture:pattern-show',
+  /** Control window → main: find the projector frame in a scan photo. */
+  CaptureDetectFrame: 'capture:detect-frame',
 
   /** Main → control window: open Settings (app menu, ⌘,). */
   SettingsOpen: 'settings:open',
